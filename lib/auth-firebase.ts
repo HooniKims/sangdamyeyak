@@ -281,7 +281,7 @@ export async function getLockedAccounts(): Promise<UserProfile[]> {
 // 교사-학부모 매칭
 // ============================================================
 
-/** 교사 중복 가입 검사 (동일 학교/학년/반에 이미 교사가 있는지 확인) */
+/** 학교코드 + 학년 + 반으로 교사 찾기 */
 export async function checkTeacherDuplicate(
     schoolCode: string,
     grade: number,
@@ -320,7 +320,7 @@ export async function matchTeacher(
     const snapshot = await getDocs(q);
     if (snapshot.empty) return null;
 
-    return snapshot.docs[0].data().uid;
+    return (snapshot.docs[0].data() as { uid: string }).uid;
 }
 
 /** 교사에 매칭된 학부모 목록 조회 */

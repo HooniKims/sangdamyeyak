@@ -69,6 +69,11 @@ function SignUpForm() {
             return;
         }
 
+        if (!schoolCode) {
+            setError(t('selectSchoolFromSearch'));
+            return;
+        }
+
         if (role === 'parent' && !studentName.trim()) {
             setError(t('enterStudentName'));
             return;
@@ -78,7 +83,7 @@ function SignUpForm() {
 
         try {
             // 교사 중복 가입 검사
-            if (role === 'teacher' && schoolCode) {
+            if (role === 'teacher') {
                 const isDuplicate = await checkTeacherDuplicate(schoolCode, grade, classNum);
                 if (isDuplicate) {
                     setError(t('duplicateTeacher'));

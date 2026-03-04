@@ -89,7 +89,7 @@ export default function ParentPage() {
 type Step = 1 | 2 | 3;
 
 function BookingTab() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { t, language } = useLanguage();
   const [step, setStep] = useState<Step>(1);
   const [studentNumber, setStudentNumber] = useState('');
@@ -113,26 +113,13 @@ function BookingTab() {
 
   // 로그인한 학부모 프로필에서 매칭된 교사 ID(matchedTeacherId)를 가져옵니다.
   useEffect(() => {
-    const fetchMatchedTeacherId = async () => {
-      if (!user?.uid) return;
-
-      try {
-        const userDoc = await getDocs(
-          query(collection(db, 'users'), where('uid', '==', user.uid))
-        );
-
-        if (!userDoc.empty) {
-          const userData = userDoc.docs[0].data();
-          if (userData.matchedTeacherId) {
-            setTeacherId(userData.matchedTeacherId);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching matched teacherId:', error);
+    if (profile?.role === 'parent') {
+      const parentProfile = profile as import('@/types/auth').ParentProfile;
+      if (parentProfile.matchedTeacherId) {
+        setTeacherId(parentProfile.matchedTeacherId);
       }
-    };
-    fetchMatchedTeacherId();
-  }, [user]);
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (!teacherId) return;

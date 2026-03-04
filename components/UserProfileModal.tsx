@@ -110,7 +110,11 @@ export default function UserProfileModal({
                                 <div>
                                     <span className="text-xs text-white/40 uppercase tracking-wider">{t('school')}</span>
                                     <p className="text-white font-medium mt-1">
-                                        {profile.schoolName} {profile.grade}{t('grade')} {profile.classNum}{t('class')}
+                                        {t('schoolInfo', {
+                                            school: profile.schoolName,
+                                            grade: profile.grade,
+                                            class: profile.classNum
+                                        })}
                                     </p>
                                 </div>
                             )}

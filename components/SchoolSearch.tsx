@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, X, Edit3 } from 'lucide-react';
+import { Search, CheckCircle } from 'lucide-react';
 import { searchSchools } from '@/lib/school-api';
 import { SchoolInfo } from '@/types/auth';
 import { useLanguage } from '@/lib/i18n';
@@ -17,8 +17,7 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
     const [results, setResults] = useState<SchoolInfo[]>([]);
     const [showDropdown, setShowDropdown] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [isManualMode, setIsManualMode] = useState(false);
-    const [manualSchoolName, setManualSchoolName] = useState('');
+    const [isConfirmed, setIsConfirmed] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const debounceTimer = useRef<NodeJS.Timeout | null>(null);
     const { t } = useLanguage();
@@ -42,6 +41,11 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
         const val = e.target.value;
         setQuery(val);
 
+        if (isConfirmed) {
+            setIsConfirmed(false);
+            onSelect({ schoolName: val, schoolCode: '', address: '', schoolType: '', eduOfficeCode: '' });
+        }
+
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
         if (val.trim().length >= 2) {
@@ -61,53 +65,9 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
     const handleSelect = (school: SchoolInfo) => {
         setQuery(school.schoolName);
         setShowDropdown(false);
+        setIsConfirmed(true);
         onSelect(school);
     };
-
-    const handleManualSubmit = () => {
-        if (manualSchoolName.trim()) {
-            const manualSchool: SchoolInfo = {
-                schoolName: manualSchoolName.trim(),
-                schoolCode: '',
-                address: '',
-                schoolType: '',
-                eduOfficeCode: '',
-            };
-            onSelect(manualSchool);
-            setQuery(manualSchoolName.trim());
-            setIsManualMode(false);
-        }
-    };
-
-    if (isManualMode) {
-        return (
-            <div className="space-y-2">
-                <input
-                    type="text"
-                    value={manualSchoolName}
-                    onChange={(e) => setManualSchoolName(e.target.value)}
-                    placeholder={t('manualInputPlaceholder')}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
-                />
-                <div className="flex gap-2">
-                    <button
-                        type="button"
-                        onClick={handleManualSubmit}
-                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors"
-                    >
-                        {t('confirm')}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setIsManualMode(false)}
-                        className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg text-sm transition-colors"
-                    >
-                        {t('backToSearch')}
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div ref={wrapperRef} className="relative">
@@ -115,13 +75,21 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
                 type="text"
                 value={query}
                 onChange={handleInputChange}
-                onFocus={() => results.length > 0 && setShowDropdown(true)}
+                onFocus={() => !isConfirmed && results.length > 0 && setShowDropdown(true)}
                 placeholder={t('schoolSearchPlaceholder')}
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
+                className={`w-full pl-11 pr-12 py-3 bg-white/10 ${isConfirmed ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.15)] text-emerald-100' : 'border-white/20 text-white'} rounded-xl placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all`}
             />
 
-            {isLoading && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isConfirmed ? 'text-emerald-500/70' : 'text-white/40'}`} />
+
+            {isConfirmed && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-emerald-400 animate-in zoom-in duration-300" />
+                </div>
+            )}
+
+            {isLoading && !isConfirmed && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     <div className="w-5 h-5 border-2 border-cyan-400/40 border-t-cyan-400 rounded-full animate-spin" />
                 </div>
             )}
@@ -152,14 +120,6 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
                 </div>
             )}
 
-            {/* 수동 입력 전환 버튼 */}
-            <button
-                type="button"
-                onClick={() => setIsManualMode(true)}
-                className="mt-1.5 text-xs text-cyan-400/70 hover:text-cyan-400 transition-colors"
-            >
-                학교를 찾을 수 없나요? 직접 입력하기
-            </button>
         </div>
     );
 }

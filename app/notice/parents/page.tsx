@@ -26,36 +26,23 @@ export default function NoticeParentsPage() {
     const [matchedTeacherId, setMatchedTeacherId] = useState<string | null>(null);
     const [matchLoading, setMatchLoading] = useState(true);
 
-    // 로그인 안 된 상태면 로그인 페이지로 이동
     useEffect(() => {
         if (!authLoading && !user) {
             router.replace('/login');
         }
     }, [authLoading, user, router]);
 
-    // 매칭된 교사 ID 가져오기
+    // profile에서 매칭된 교사 ID 직접 가져오기
     useEffect(() => {
-        const fetchMatchedTeacherId = async () => {
-            if (!user?.uid) return;
-
-            try {
-                const userDoc = await getDocs(
-                    query(collection(db, 'users'), where('uid', '==', user.uid))
-                );
-
-                if (!userDoc.empty) {
-                    const userData = userDoc.docs[0].data();
-                    setMatchedTeacherId(userData.matchedTeacherId || null);
-                }
-            } catch (error) {
-                console.error('Error fetching matched teacherId:', error);
-            } finally {
-                setMatchLoading(false);
-            }
-        };
-
-        fetchMatchedTeacherId();
-    }, [user]);
+        if (profile?.role === 'parent') {
+            const parentProfile = profile as import('@/types/auth').ParentProfile;
+            setMatchedTeacherId(parentProfile.matchedTeacherId || null);
+            setMatchLoading(false);
+        } else if (profile?.role === 'teacher' || profile?.role === 'admin') {
+            setMatchedTeacherId(user?.uid || null); // 교사는 본인 ID
+            setMatchLoading(false);
+        }
+    }, [profile, user]);
 
     useEffect(() => {
         if (!user || matchLoading) return;

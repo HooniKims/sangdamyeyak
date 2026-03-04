@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactCalendar from 'react-calendar';
 import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { ko, enUS } from 'date-fns/locale';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MessageCircle, ArrowLeft, AlertTriangle } from 'lucide-react';
@@ -14,10 +14,12 @@ import { getNoteByDate } from '@/lib/notice-firebase';
 import { useAuth } from '@/components/AuthContext';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useLanguage } from '@/lib/i18n';
 
 export default function NoticeParentsPage() {
     const { user, profile, loading: authLoading } = useAuth();
     const router = useRouter();
+    const { t, language } = useLanguage();
     const [date, setDate] = useState<Date>(new Date());
     const [summary, setSummary] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -87,9 +89,9 @@ export default function NoticeParentsPage() {
             <div className="max-w-5xl mx-auto px-4 py-8">
                 <div className="mb-6 flex items-center justify-between">
                     <Link href="/" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700">
-                        <ArrowLeft className="w-4 h-4 mr-1" /> 메인으로
+                        <ArrowLeft className="w-4 h-4 mr-1" /> {t('backToMain')}
                     </Link>
-                    <h1 className="text-2xl font-bold text-gray-900">📋 알림장</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">{t('noticeTitle')}</h1>
                     <div />
                 </div>
 
@@ -98,9 +100,9 @@ export default function NoticeParentsPage() {
                     <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
                         <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
                         <div>
-                            <p className="font-medium text-amber-800">담임 교사와 매칭되지 않았습니다.</p>
+                            <p className="font-medium text-amber-800">{t('teacherNotMatched')}</p>
                             <p className="text-sm text-amber-700 mt-1">
-                                같은 학교·학년·반으로 등록된 교사가 아직 없습니다. 교사가 가입한 후 자동으로 매칭됩니다.
+                                {t('teacherNotMatchedDesc')}
                             </p>
                         </div>
                     </div>
@@ -113,12 +115,12 @@ export default function NoticeParentsPage() {
                             <ReactCalendar
                                 onChange={(value) => setDate(value as Date)}
                                 value={date}
-                                locale="ko-KR"
+                                locale={language === 'ko' ? 'ko-KR' : 'en-US'}
                                 calendarType="gregory"
                                 className="!w-full !border-none !font-sans"
                             />
                             <p className="text-center text-sm text-gray-400 mt-3">
-                                날짜를 선택하여 가정통신문을 확인하세요.
+                                {t('selectDateNotice')}
                             </p>
                         </div>
                     </div>
@@ -127,13 +129,13 @@ export default function NoticeParentsPage() {
                     <div className="lg:col-span-2">
                         <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 min-h-[400px]">
                             <h2 className="text-xl font-bold text-emerald-600 mb-4 pb-3 border-b-2 border-gray-100">
-                                {format(date, 'yyyy년 M월 d일 (EEE)', { locale: ko })} 알림장
+                                {format(date, language === 'ko' ? 'yyyy년 M월 d일 (EEE)' : 'MMM d, yyyy (EEE)', { locale: language === 'ko' ? ko : enUS })} {t('notice')}
                             </h2>
 
                             {isLoading ? (
                                 <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
                                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mb-3"></div>
-                                    <p>내용을 불러오는 중입니다...</p>
+                                    <p>{t('loadingNotice')}</p>
                                 </div>
                             ) : summary ? (
                                 <div className="prose prose-sm max-w-none">
@@ -151,8 +153,8 @@ export default function NoticeParentsPage() {
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
                                     <MessageCircle size={48} className="mb-4 opacity-50" />
-                                    <p className="font-medium">등록된 알림장이 없습니다.</p>
-                                    <p className="text-sm">다른 날짜를 선택해보세요.</p>
+                                    <p className="font-medium">{t('noNoticeForDate')}</p>
+                                    <p className="text-sm">{t('tryAnotherDate')}</p>
                                 </div>
                             )}
                         </div>

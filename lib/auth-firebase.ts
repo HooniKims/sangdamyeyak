@@ -281,6 +281,26 @@ export async function getLockedAccounts(): Promise<UserProfile[]> {
 // 교사-학부모 매칭
 // ============================================================
 
+/** 교사 중복 가입 검사 (동일 학교/학년/반에 이미 교사가 있는지 확인) */
+export async function checkTeacherDuplicate(
+    schoolCode: string,
+    grade: number,
+    classNum: number
+): Promise<boolean> {
+    if (!schoolCode) return false;
+
+    const q = query(
+        collection(db, 'users'),
+        where('role', 'in', ['teacher', 'admin']),
+        where('schoolCode', '==', schoolCode),
+        where('grade', '==', grade),
+        where('classNum', '==', classNum)
+    );
+
+    const snapshot = await getDocs(q);
+    return !snapshot.empty;
+}
+
 /** 학교코드 + 학년 + 반으로 교사 찾기 */
 export async function matchTeacher(
     schoolCode: string,

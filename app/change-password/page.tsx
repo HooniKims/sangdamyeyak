@@ -6,9 +6,11 @@ import { Lock, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 import { changePassword } from '@/lib/auth-firebase';
 import { useAuth } from '@/components/AuthContext';
 import AuthGuard from '@/components/AuthGuard';
+import { useLanguage } from '@/lib/i18n';
 
 function ChangePasswordContent() {
     const { user } = useAuth();
+    const { t } = useLanguage();
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -24,12 +26,12 @@ function ChangePasswordContent() {
         setSuccess(false);
 
         if (newPassword.length < 6) {
-            setError('새 비밀번호는 6자 이상이어야 합니다.');
+            setError(t('passwordTooShort'));
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            setError('새 비밀번호가 일치하지 않습니다.');
+            setError(t('passwordMismatch'));
             return;
         }
 
@@ -43,9 +45,9 @@ function ChangePasswordContent() {
         } catch (err: unknown) {
             const firebaseError = err as { code?: string };
             if (firebaseError.code === 'auth/wrong-password' || firebaseError.code === 'auth/invalid-credential') {
-                setError('현재 비밀번호가 올바르지 않습니다.');
+                setError(t('wrongCurrentPassword'));
             } else {
-                setError('비밀번호 변경에 실패했습니다.');
+                setError(t('changePasswordFailed'));
             }
         } finally {
             setLoading(false);
@@ -63,23 +65,23 @@ function ChangePasswordContent() {
                 <div className="text-center mb-8">
                     <Link href="/" className="inline-block">
                         <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent">
-                            스쿨홀릭
+                            {t('schoolholic')}
                         </h1>
                     </Link>
-                    <p className="text-blue-200/60 text-sm mt-2">비밀번호 변경</p>
+                    <p className="text-blue-200/60 text-sm mt-2">{t('changePasswordTitle')}</p>
                 </div>
 
                 <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8">
                     {success ? (
                         <div className="text-center space-y-4">
                             <CheckCircle className="w-16 h-16 text-emerald-400 mx-auto" />
-                            <h2 className="text-xl font-bold text-white">비밀번호가 변경되었습니다</h2>
-                            <p className="text-blue-200/70 text-sm">새 비밀번호로 로그인할 수 있습니다.</p>
+                            <h2 className="text-xl font-bold text-white">{t('passwordChanged')}</h2>
+                            <p className="text-blue-200/70 text-sm">{t('passwordChangedDesc')}</p>
                             <Link
                                 href="/"
                                 className="inline-block mt-4 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl transition-all duration-300"
                             >
-                                홈으로 돌아가기
+                                {t('backToMain')}
                             </Link>
                         </div>
                     ) : (
@@ -97,14 +99,14 @@ function ChangePasswordContent() {
 
                             {/* Current Password */}
                             <div>
-                                <label className="block text-sm font-medium text-white/70 mb-1.5">현재 비밀번호</label>
+                                <label className="block text-sm font-medium text-white/70 mb-1.5">{t('currentPassword')}</label>
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
                                     <input
                                         type={showCurrent ? 'text' : 'password'}
                                         value={currentPassword}
                                         onChange={(e) => setCurrentPassword(e.target.value)}
-                                        placeholder="현재 비밀번호"
+                                        placeholder={t('currentPasswordPlaceholder')}
                                         required
                                         className="w-full pl-11 pr-12 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
                                     />
@@ -120,14 +122,14 @@ function ChangePasswordContent() {
 
                             {/* New Password */}
                             <div>
-                                <label className="block text-sm font-medium text-white/70 mb-1.5">새 비밀번호</label>
+                                <label className="block text-sm font-medium text-white/70 mb-1.5">{t('newPassword')}</label>
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
                                     <input
                                         type={showNew ? 'text' : 'password'}
                                         value={newPassword}
                                         onChange={(e) => setNewPassword(e.target.value)}
-                                        placeholder="6자 이상 입력"
+                                        placeholder={t('passwordMinLength')}
                                         required
                                         minLength={6}
                                         className="w-full pl-11 pr-12 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
@@ -144,14 +146,14 @@ function ChangePasswordContent() {
 
                             {/* Confirm Password */}
                             <div>
-                                <label className="block text-sm font-medium text-white/70 mb-1.5">새 비밀번호 확인</label>
+                                <label className="block text-sm font-medium text-white/70 mb-1.5">{t('confirmNewPassword')}</label>
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
                                     <input
                                         type="password"
                                         value={confirmPassword}
                                         onChange={(e) => setConfirmPassword(e.target.value)}
-                                        placeholder="새 비밀번호 재입력"
+                                        placeholder={t('confirmNewPasswordPlaceholder')}
                                         required
                                         className="w-full pl-11 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
                                     />
@@ -166,16 +168,16 @@ function ChangePasswordContent() {
                                 {loading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                        변경 중...
+                                        {t('changing')}
                                     </span>
                                 ) : (
-                                    '비밀번호 변경'
+                                    t('changePasswordButton')
                                 )}
                             </button>
 
                             <p className="text-center text-sm text-white/50 mt-4">
                                 <Link href="/" className="text-cyan-400 hover:text-cyan-300 transition-colors">
-                                    ← 홈으로 돌아가기
+                                    ← {t('backToMain')}
                                 </Link>
                             </p>
                         </form>

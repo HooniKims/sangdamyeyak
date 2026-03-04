@@ -10,14 +10,16 @@ import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ConfirmModal from '@/components/ConfirmModal';
 import { Period, AvailableSlot, Reservation, DEFAULT_PERIODS } from '@/types';
-import { formatDate, formatDateKorean, generateId } from '@/lib/utils';
+import { formatDate, formatDateI18n, generateId } from '@/lib/utils';
 import { Clock, Trash2, Settings, Calendar as CalendarIcon, Download, X, Home } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/components/AuthContext';
+import { useLanguage } from '@/lib/i18n';
 
 export default function TeacherPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { t, language } = useLanguage();
 
   // 로그인한 교사의 ID 사용
   const teacherId = user?.uid;
@@ -133,11 +135,11 @@ export default function TeacherPage() {
         await updateDoc(docRef, { periods });
       }
 
-      alert('교시 시간이 저장되었습니다.');
+      alert(t('periodsSaved'));
       setShowSettings(false);
     } catch (error) {
-      console.error('저장 오류:', error);
-      alert('저장에 실패했습니다.');
+      console.error('Save error:', error);
+      alert(t('saveFailed'));
     }
   };
 
@@ -206,10 +208,10 @@ export default function TeacherPage() {
 
       setSelectedDates([]);
       setSelectedPeriods({});
-      alert('상담 가능 시간이 설정되었습니다.');
+      alert(t('counselingTimeSet'));
     } catch (error) {
-      console.error('저장 오류:', error);
-      alert('저장에 실패했습니다.');
+      console.error('Save error:', error);
+      alert(t('saveFailed'));
     }
   };
 
@@ -217,14 +219,14 @@ export default function TeacherPage() {
   const handleDeleteSlot = (slotId: string) => {
     setConfirmModal({
       isOpen: true,
-      title: '상담 시간 삭제',
-      message: '이 시간대를 삭제하시겠습니까?',
+      title: t('deleteSlotTitle'),
+      message: t('deleteSlotMessage'),
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, 'availableSlots', slotId));
         } catch (error) {
           console.error('삭제 오류:', error);
-          alert('삭제에 실패했습니다.');
+          alert(t('deleteFailed'));
         }
       },
     });
@@ -234,8 +236,8 @@ export default function TeacherPage() {
   const handleCancelReservation = (reservation: Reservation) => {
     setConfirmModal({
       isOpen: true,
-      title: '예약 취소',
-      message: `${reservation.studentName}(${reservation.studentNumber})의 예약을 취소하시겠습니까?`,
+      title: t('cancelReservationTitle'),
+      message: t('cancelReservationMessage', { name: reservation.studentName, number: reservation.studentNumber }),
       onConfirm: async () => {
         try {
           const reservationRef = doc(db, 'reservations', reservation.id);
@@ -246,10 +248,10 @@ export default function TeacherPage() {
             transaction.update(slotRef, { status: 'available' });
           });
 
-          alert('예약이 취소되었습니다.');
+          alert(t('reservationCanceled'));
         } catch (error) {
-          console.error('예약 취소 오류:', error);
-          alert('예약 취소에 실패했습니다.');
+          console.error('Cancel error:', error);
+          alert(t('cancelFailed'));
         }
       },
     });
@@ -258,7 +260,7 @@ export default function TeacherPage() {
   // Excel 내보내기
   const handleExportToExcel = () => {
     if (reservations.length === 0) {
-      alert('내보낼 예약 데이터가 없습니다.');
+      alert(t('noExportData'));
       return;
     }
 
@@ -266,20 +268,20 @@ export default function TeacherPage() {
     const data = reservations.map((reservation) => {
       const period = periods.find((p) => p.number === reservation.period);
       let consultationTypeStr = '';
-      if (reservation.consultationType === 'face') consultationTypeStr = '대면 상담';
-      else if (reservation.consultationType === 'phone') consultationTypeStr = '전화 상담';
-      else if (reservation.consultationType === 'etc') consultationTypeStr = `기타 (${reservation.consultationTypeEtc || ''})`;
+      if (reservation.consultationType === 'face') consultationTypeStr = t('faceToFace');
+      else if (reservation.consultationType === 'phone') consultationTypeStr = t('phoneCounseling');
+      else if (reservation.consultationType === 'etc') consultationTypeStr = `${t('other')} (${reservation.consultationTypeEtc || ''})`;
 
       return {
-        '학번': reservation.studentNumber,
-        '이름': reservation.studentName,
-        '날짜': formatDateKorean(reservation.date),
-        '교시': period?.label || `${reservation.period}교시`,
-        '시간': `${reservation.startTime} - ${reservation.endTime}`,
-        '상담 주제': reservation.topic,
-        '상담 방식': consultationTypeStr,
-        '상담 내용': reservation.content,
-        '예약 일시': new Date(reservation.createdAt).toLocaleString('ko-KR'),
+        [t('studentNumber')]: reservation.studentNumber,
+        [t('studentNameField')]: reservation.studentName,
+        [t('date') || '날짜']: formatDateI18n(reservation.date, language),
+        [t('periodLabel', { number: '' }).trim() || '교시']: t('periodLabel', { number: reservation.period }),
+        [t('time')]: `${reservation.startTime} - ${reservation.endTime}`,
+        [t('topic')]: t(reservation.topic),
+        [t('method')]: consultationTypeStr,
+        [t('content')]: reservation.content,
+        [t('reservationDate')]: new Date(reservation.createdAt).toLocaleString(language === 'ko' ? 'ko-KR' : 'en-US'),
       };
     });
 
@@ -305,14 +307,14 @@ export default function TeacherPage() {
 
   if (loading) {
     return (
-      <Layout title="교사 대시보드">
+      <Layout title={t('teacherDashboard')}>
         <LoadingSpinner />
       </Layout>
     );
   }
 
   return (
-    <Layout title="상담 예약 관리" description="상담 가능한 날짜와 시간을 설정하고 예약 현황을 확인하세요">
+    <Layout title={t('counselingManage')} description={t('counselingManageDesc')}>
       <div className="p-6 sm:p-8">
         {/* 상단 버튼들 */}
         <div className="mb-6 flex gap-3 flex-wrap">
@@ -322,7 +324,7 @@ export default function TeacherPage() {
             size="sm"
           >
             <Home className="w-4 h-4 mr-2" />
-            메인으로
+            {t('backToMain')}
           </Button>
           <Button
             onClick={() => setShowSettings(!showSettings)}
@@ -330,14 +332,14 @@ export default function TeacherPage() {
             size="sm"
           >
             <Settings className="w-4 h-4 mr-2" />
-            교시 시간 설정
+            {t('periodSettings')}
           </Button>
         </div>
 
         {/* 교시 설정 패널 */}
         {showSettings && (
           <div className="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="text-lg font-semibold mb-4">교시별 시간 설정</h3>
+            <h3 className="text-lg font-semibold mb-4">{t('periodTimeSettings')}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               {periods.map((period, index) => (
                 <div key={period.number} className="flex items-center gap-2">
@@ -367,7 +369,7 @@ export default function TeacherPage() {
               ))}
             </div>
             <Button onClick={savePeriods} size="sm">
-              시간 저장
+              {t('saveTime')}
             </Button>
           </div>
         )}
@@ -376,7 +378,7 @@ export default function TeacherPage() {
         <div className="mb-8">
           <h3 className="text-lg font-semibold mb-4 flex items-center">
             <CalendarIcon className="w-5 h-5 mr-2" />
-            상담 가능 날짜 선택
+            {t('selectCounselingDate')}
           </h3>
           <Calendar selectedDates={selectedDates} onDateSelect={handleDateSelect} />
         </div>
@@ -386,13 +388,13 @@ export default function TeacherPage() {
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4 flex items-center">
               <Clock className="w-5 h-5 mr-2" />
-              교시 선택
+              {t('selectPeriod')}
             </h3>
             <div className="space-y-4">
               {selectedDates.map((date) => (
                 <div key={date} className="p-4 bg-gray-50 rounded-lg">
                   <h4 className="font-medium mb-3 text-gray-900">
-                    {formatDateKorean(date)}
+                    {formatDateI18n(date, language)}
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {periods.map((period) => {
@@ -422,7 +424,7 @@ export default function TeacherPage() {
             </div>
             <div className="mt-4">
               <Button onClick={handleSaveSlots} size="lg" className="w-full sm:w-auto">
-                상담 시간 설정 완료
+                {t('completeCounselingSetup')}
               </Button>
             </div>
           </div>
@@ -431,7 +433,7 @@ export default function TeacherPage() {
         {/* 설정된 상담 가능 시간 목록 */}
         {availableSlots.length > 0 && (
           <div className="mb-8">
-            <h3 className="text-lg font-semibold mb-4">설정된 상담 가능 시간</h3>
+            <h3 className="text-lg font-semibold mb-4">{t('setAvailableTimes')}</h3>
             <div className="space-y-2">
               {availableSlots
                 .sort((a, b) => a.date.localeCompare(b.date) || a.period - b.period)
@@ -446,14 +448,14 @@ export default function TeacherPage() {
                         }`}
                     >
                       <div className="flex-1">
-                        <span className="font-medium">{formatDateKorean(slot.date)}</span>
+                        <span className="font-medium">{formatDateI18n(slot.date, language)}</span>
                         <span className="mx-2 text-gray-400">|</span>
                         <span className="text-gray-700">
-                          {period?.label} ({slot.startTime}-{slot.endTime})
+                          {t('periodLabel', { number: slot.period })} ({slot.startTime}-{slot.endTime})
                         </span>
                         {slot.status === 'reserved' && (
                           <span className="ml-2 text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                            예약됨
+                            {t('reserved')}
                           </span>
                         )}
                       </div>
@@ -477,7 +479,7 @@ export default function TeacherPage() {
         {reservations.length > 0 && (
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
-              <h3 className="text-lg font-semibold">예약 현황 ({reservations.length}건)</h3>
+              <h3 className="text-lg font-semibold">{t('reservationStatus')} ({reservations.length}{t('reservationCount', { count: '' })})</h3>
               <Button
                 onClick={handleExportToExcel}
                 variant="secondary"
@@ -485,7 +487,7 @@ export default function TeacherPage() {
                 className="mt-2 sm:mt-0"
               >
                 <Download className="w-4 h-4 mr-2" />
-                Excel 내보내기
+                {t('exportExcel')}
               </Button>
             </div>
             <div className="space-y-4">
@@ -502,7 +504,7 @@ export default function TeacherPage() {
                           {reservation.studentNumber} - {reservation.studentName}
                         </div>
                         <div className="text-sm text-gray-600">
-                          {formatDateKorean(reservation.date)} {period?.label}
+                          {formatDateI18n(reservation.date, language)} {t('periodLabel', { number: reservation.period })}
                         </div>
                       </div>
                       <Button
@@ -512,25 +514,25 @@ export default function TeacherPage() {
                         className="mt-2 sm:mt-0 text-red-600 hover:bg-red-50"
                       >
                         <X className="w-4 h-4 mr-1" />
-                        취소
+                        {t('cancel')}
                       </Button>
                     </div>
                     <div className="text-sm text-gray-700 mb-1">
-                      <span className="font-medium">시간:</span> {reservation.startTime} - {reservation.endTime}
+                      <span className="font-medium">{t('time')}:</span> {reservation.startTime} - {reservation.endTime}
                     </div>
                     <div className="text-sm text-gray-700 mb-1">
-                      <span className="font-medium">주제:</span> {reservation.topic}
+                      <span className="font-medium">{t('topic')}:</span> {reservation.topic}
                     </div>
                     <div className="text-sm text-gray-700 mb-1">
-                      <span className="font-medium">방식:</span>{' '}
+                      <span className="font-medium">{t('method')}:</span>{' '}
                       {reservation.consultationType === 'face'
-                        ? '대면 상담'
+                        ? t('faceToFace')
                         : reservation.consultationType === 'phone'
-                          ? '전화 상담'
-                          : `기타 (${reservation.consultationTypeEtc || ''})`}
+                          ? t('phoneCounseling')
+                          : `${t('other')} (${reservation.consultationTypeEtc || ''})`}
                     </div>
                     <div className="text-sm text-gray-700">
-                      <span className="font-medium">내용:</span> {reservation.content}
+                      <span className="font-medium">{t('content')}:</span> {reservation.content}
                     </div>
                   </div>
                 );
@@ -542,8 +544,8 @@ export default function TeacherPage() {
         {availableSlots.length === 0 && reservations.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>아직 설정된 상담 시간이 없습니다.</p>
-            <p className="text-sm">달력에서 날짜를 선택하여 상담 가능 시간을 설정하세요.</p>
+            <p>{t('noSetTimes')}</p>
+            <p className="text-sm">{t('noSetTimesHint')}</p>
           </div>
         )}
       </div>
@@ -555,7 +557,7 @@ export default function TeacherPage() {
         title={confirmModal.title}
         message={confirmModal.message}
         isDangerous={true}
-        confirmText="삭제"
+        confirmText={t('delete')}
       />
     </Layout>
   );

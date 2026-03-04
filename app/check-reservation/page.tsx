@@ -4,11 +4,14 @@ import { useState } from 'react';
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Layout from '@/components/Layout';
+import { useAuth } from '@/components/AuthContext';
+import { useLanguage } from '@/lib/i18n';
+import { useRouter } from 'next/navigation';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { Reservation, Period, DEFAULT_PERIODS } from '@/types';
-import { formatDateKorean } from '@/lib/utils';
-import { Search, X, Calendar, Clock, User, MessageSquare } from 'lucide-react';
+import { formatDateI18n } from '@/lib/utils';
+import { Search, X, Calendar, Clock, User, MessageSquare, ArrowLeft } from 'lucide-react';
 
 export default function CheckReservationPage() {
   const [step, setStep] = useState<1 | 2>(1);
@@ -19,11 +22,14 @@ export default function CheckReservationPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
+  const router = useRouter();
+  const { t, language } = useLanguage();
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!studentNumber.trim() || !studentName.trim()) {
-      alert('학번과 이름을 모두 입력해주세요.');
+      alert(t('enterStudentInfo'));
       return;
     }
 
@@ -51,14 +57,14 @@ export default function CheckReservationPage() {
       setStep(2);
     } catch (error) {
       console.error('예약 조회 오류:', error);
-      alert('예약 조회에 실패했습니다.');
+      alert(t('searchError'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancelReservation = async (reservation: Reservation) => {
-    if (!confirm('정말로 이 예약을 취소하시겠습니까?')) return;
+    if (!window.confirm(t('confirmCancelReservation'))) return;
 
     try {
       // 예약 삭제
@@ -71,10 +77,10 @@ export default function CheckReservationPage() {
       // 목록에서 제거
       setReservations(reservations.filter((r) => r.id !== reservation.id));
 
-      alert('예약이 취소되었습니다.');
+      alert(t('reservationCanceled'));
     } catch (error) {
       console.error('예약 취소 오류:', error);
-      alert('예약 취소에 실패했습니다.');
+      alert(t('cancelError'));
     }
   };
 
@@ -89,21 +95,21 @@ export default function CheckReservationPage() {
   if (step === 1) {
     return (
       <Layout
-        title="예약 확인 및 취소"
-        description="학생 정보를 입력하여 예약을 확인하세요"
+        title={t('checkReservationTitle')}
+        description={t('checkReservationDescription')}
       >
         <form onSubmit={handleSearch} className="p-6 sm:p-8">
           <div className="max-w-md mx-auto space-y-6">
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <User className="w-4 h-4 mr-2" />
-                학번
+                {t('studentNumber')}
               </label>
               <input
                 type="text"
                 value={studentNumber}
                 onChange={(e) => setStudentNumber(e.target.value)}
-                placeholder="학번을 입력하세요"
+                placeholder={t('studentNumberPlaceholder')}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               />
@@ -112,13 +118,13 @@ export default function CheckReservationPage() {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <User className="w-4 h-4 mr-2" />
-                이름
+                {t('studentName')}
               </label>
               <input
                 type="text"
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
-                placeholder="이름을 입력하세요"
+                placeholder={t('studentNameFieldPlaceholder')}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               />
@@ -128,12 +134,12 @@ export default function CheckReservationPage() {
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  조회 중...
+                  {t('searching')}
                 </>
               ) : (
                 <>
                   <Search className="w-5 h-5 mr-2" />
-                  예약 조회
+                  {t('searchReservation')}
                 </>
               )}
             </Button>
@@ -146,8 +152,8 @@ export default function CheckReservationPage() {
   // Step 2: 예약 목록 표시
   return (
     <Layout
-      title="예약 확인"
-      description={`${studentName}님의 예약 내역`}
+      title={t('checkReservationTitle')}
+      description={t('reservationHistoryFor', { studentName })}
     >
       <div className="p-6 sm:p-8">
         <div className="max-w-3xl mx-auto">
@@ -156,24 +162,24 @@ export default function CheckReservationPage() {
               <span className="font-medium">{studentNumber}</span> - {studentName}
             </div>
             <Button onClick={handleReset} variant="ghost" size="sm">
-              다시 조회
+              {t('searchAgain')}
             </Button>
           </div>
 
           {loading ? (
-            <LoadingSpinner text="조회 중..." />
+            <LoadingSpinner text={t('searching')} />
           ) : reservations.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg">
               <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-              <p className="text-gray-600 mb-2">예약 내역이 없습니다.</p>
+              <p className="text-gray-600 mb-2">{t('noReservations')}</p>
               <p className="text-sm text-gray-500">
-                입력하신 정보로 등록된 예약을 찾을 수 없습니다.
+                {t('noReservationsDetail')}
               </p>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="text-sm text-gray-600 mb-4">
-                총 <span className="font-semibold text-blue-600">{reservations.length}건</span>의 예약이 있습니다.
+                {t('totalReservations', { count: reservations.length })}
               </div>
 
               {reservations.map((reservation) => {
@@ -183,29 +189,28 @@ export default function CheckReservationPage() {
                 return (
                   <div
                     key={reservation.id}
-                    className={`p-5 rounded-lg border-2 ${
-                      isPast
-                        ? 'bg-gray-50 border-gray-300'
-                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
-                    }`}
+                    className={`p-5 rounded-lg border-2 ${isPast
+                      ? 'bg-gray-50 border-gray-300'
+                      : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+                      }`}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <Calendar className="w-5 h-5 text-blue-600" />
                           <span className="font-semibold text-gray-900">
-                            {formatDateKorean(reservation.date)}
+                            {formatDateI18n(reservation.date, language)}
                           </span>
                           {isPast && (
                             <span className="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded">
-                              지난 예약
+                              {t('pastReservation')}
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-700 mb-1">
                           <Clock className="w-4 h-4" />
                           <span>
-                            {period?.label} ({reservation.startTime} - {reservation.endTime})
+                            {t('periodLabel', { number: reservation.period })} ({reservation.startTime} - {reservation.endTime})
                           </span>
                         </div>
                       </div>
@@ -218,7 +223,7 @@ export default function CheckReservationPage() {
                           className="mt-2 sm:mt-0 text-red-600 hover:bg-red-50"
                         >
                           <X className="w-4 h-4 mr-1" />
-                          예약 취소
+                          {t('cancelReservation')}
                         </Button>
                       )}
                     </div>
@@ -227,14 +232,14 @@ export default function CheckReservationPage() {
                       <div className="flex items-start gap-2 text-sm">
                         <MessageSquare className="w-4 h-4 mt-0.5 text-gray-500" />
                         <div>
-                          <span className="font-medium text-gray-700">주제:</span>{' '}
-                          <span className="text-gray-600">{reservation.topic}</span>
+                          <span className="font-medium text-gray-700">{t('topic')}:</span>{' '}
+                          <span className="text-gray-600">{t(reservation.topic)}</span>
                         </div>
                       </div>
 
                       <div className="pl-6">
                         <div className="text-sm">
-                          <span className="font-medium text-gray-700">내용:</span>
+                          <span className="font-medium text-gray-700">{t('content')}:</span>
                           <p className="text-gray-600 mt-1 whitespace-pre-wrap">
                             {reservation.content}
                           </p>
@@ -242,7 +247,7 @@ export default function CheckReservationPage() {
                       </div>
 
                       <div className="text-xs text-gray-500 pl-6 pt-1">
-                        예약 일시: {new Date(reservation.createdAt).toLocaleString('ko-KR')}
+                        {t('reservationDate')}: {new Date(reservation.createdAt).toLocaleString(language === 'ko' ? 'ko-KR' : 'en-US')}
                       </div>
                     </div>
                   </div>

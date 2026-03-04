@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthContext";
+import { LanguageProvider } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "스쿨홀릭 - 학부모 커뮤니케이션 플랫폼",
@@ -32,7 +33,9 @@ export default function RootLayout({
       </head>
       <body className="antialiased" suppressHydrationWarning>
         <AuthProvider>
-          {children}
+          <LanguageProvider>
+            {children}
+          </LanguageProvider>
         </AuthProvider>
         {/* Service Worker 등록 */}
         <script

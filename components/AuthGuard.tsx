@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './AuthContext';
+import { useLanguage } from '@/lib/i18n';
 import { UserRole } from '@/types/auth';
 
 interface AuthGuardProps {
@@ -17,6 +18,7 @@ interface AuthGuardProps {
  */
 export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
     const { user, profile, loading } = useAuth();
+    const { t } = useLanguage();
     const router = useRouter();
 
     useEffect(() => {
@@ -39,7 +41,7 @@ export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
             <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
                     <div className="w-10 h-10 border-3 border-cyan-400/40 border-t-cyan-400 rounded-full animate-spin" />
-                    <p className="text-white/60 text-sm">로딩 중...</p>
+                    <p className="text-white/70">{t('loadingAuth')}</p>
                 </div>
             </div>
         );

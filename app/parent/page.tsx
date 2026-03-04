@@ -21,15 +21,17 @@ import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ConfirmModal from '@/components/ConfirmModal';
 import { AvailableSlot, COUNSELING_TOPICS, CounselingTopic, Period, Reservation, DEFAULT_PERIODS } from '@/types';
-import { formatDateKorean } from '@/lib/utils';
+import { formatDateI18n } from '@/lib/utils';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthContext';
+import { useLanguage } from '@/lib/i18n';
 
 type Tab = 'book' | 'check';
 
 export default function ParentPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('book');
 
   // 로그인 안 된 상태면 로그인 페이지로 이동
@@ -50,7 +52,7 @@ export default function ParentPage() {
   }
 
   return (
-    <Layout title="학부모(보호자) 페이지" description="상담 예약 및 예약 확인">
+    <Layout title={t('parentPage')} description={t('parentPageDesc')}>
       <div className="max-w-4xl mx-auto">
         {/* 탭 네비게이션 */}
         <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
@@ -63,7 +65,7 @@ export default function ParentPage() {
               }`}
           >
             <CalendarPlus className="w-5 h-5 inline-block mr-2" />
-            예약하기
+            {t('bookReservation')}
           </button>
           <button
             type="button"
@@ -74,7 +76,7 @@ export default function ParentPage() {
               }`}
           >
             <Search className="w-5 h-5 inline-block mr-2" />
-            예약 조회 / 취소
+            {t('checkCancel')}
           </button>
         </div>
 
@@ -88,6 +90,7 @@ type Step = 1 | 2 | 3;
 
 function BookingTab() {
   const { user } = useAuth();
+  const { t, language } = useLanguage();
   const [step, setStep] = useState<Step>(1);
   const [studentNumber, setStudentNumber] = useState('');
   const [studentName, setStudentName] = useState('');
@@ -160,7 +163,7 @@ function BookingTab() {
   const handleStudentInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentNumber.trim() || !studentName.trim()) {
-      alert('학번과 이름을 모두 입력해 주세요.');
+      alert(t('enterBothFields'));
       return;
     }
     setStep(2);
@@ -214,8 +217,8 @@ function BookingTab() {
 
       setConfirmModal({
         isOpen: true,
-        title: '예약 완료',
-        message: '상담 예약이 완료되었습니다.\n예약 확인은 예약 조회/취소 탭에서 확인하실 수 있습니다.',
+        title: t('bookingCompleted'),
+        message: t('bookingCompletedMsg'),
         cancelText: null,
         onConfirm: () => {
           setStep(1);
@@ -232,8 +235,8 @@ function BookingTab() {
       console.error('예약 오류:', error);
       setConfirmModal({
         isOpen: true,
-        title: '예약 실패',
-        message: '예약에 실패했습니다. 다른 시간을 선택하거나 선생님께 문의해주세요.',
+        title: t('bookingFailed'),
+        message: t('bookingFailedMsg'),
         cancelText: null,
         onConfirm: () => {
           setStep(2); // On error, return to the time selection step
@@ -251,13 +254,13 @@ function BookingTab() {
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="w-4 h-4 mr-2" />
-              학번
+              {t('studentNumber')}
             </label>
             <input
               type="text"
               value={studentNumber}
               onChange={e => setStudentNumber(e.target.value)}
-              placeholder="학번을 입력하세요"
+              placeholder={t('studentNumberPlaceholder')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent [transform:translateZ(0)]"
               required
             />
@@ -266,20 +269,20 @@ function BookingTab() {
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="w-4 h-4 mr-2" />
-              이름
+              {t('studentNameField')}
             </label>
             <input
               type="text"
               value={studentName}
               onChange={e => setStudentName(e.target.value)}
-              placeholder="이름을 입력하세요"
+              placeholder={t('studentNameFieldPlaceholder')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent [transform:translateZ(0)]"
               required
             />
           </div>
 
           <Button type="submit" size="lg" className="w-full">
-            다음
+            {t('next')}
           </Button>
         </form>
       </div>
@@ -295,19 +298,19 @@ function BookingTab() {
               <span className="font-medium">{studentNumber}</span> - {studentName}
             </div>
             <Button onClick={() => setStep(1)} variant="ghost" size="sm">
-              정보 수정
+              {t('editInfo')}
             </Button>
           </div>
         </div>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          상담 가능한 시간을 선택하세요
+          {t('selectAvailableTime')}
         </h3>
 
         {availableSlots.length === 0 ? (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
             <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-            <p className="text-gray-600">예약 가능한 시간이 없습니다.</p>
+            <p className="text-gray-600">{t('noAvailableTime')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -322,8 +325,8 @@ function BookingTab() {
                 >
                   <div>
                     <div className="font-medium text-gray-900">
-                      {formatDateKorean(slot.date)}{' '}
-                      {period?.label ?? `${slot.period}교시`}
+                      {formatDateI18n(slot.date, language)}{' '}
+                      {t('periodLabel', { number: slot.period })}
                     </div>
                     <div className="text-sm text-gray-600">
                       {slot.startTime} ~ {slot.endTime}
@@ -347,9 +350,8 @@ function BookingTab() {
           <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
           <div>
             <div className="font-medium text-gray-900 mb-1">
-              {formatDateKorean(selectedSlot.date)}{' '}
-              {periods.find(p => p.number === selectedSlot.period)?.label ??
-                `${selectedSlot.period}교시`}
+              {formatDateI18n(selectedSlot.date, language)}{' '}
+              {t('periodLabel', { number: selectedSlot.period })}
             </div>
             <div className="text-sm text-gray-700">
               {selectedSlot.startTime} ~ {selectedSlot.endTime}
@@ -361,20 +363,20 @@ function BookingTab() {
       <form onSubmit={handleBookingSubmit} className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            상담 주제
+            {t('counselingTopic')}
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {COUNSELING_TOPICS.map(t => (
+            {COUNSELING_TOPICS.map(item => (
               <button
-                key={t}
+                key={item}
                 type="button"
-                onClick={() => setTopic(t)}
-                className={`px-3 py-2 rounded-lg text-sm border ${topic === t
+                onClick={() => setTopic(item)}
+                className={`px-3 py-2 rounded-lg text-sm border ${topic === item
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
                   }`}
               >
-                {t}
+                {t(item)}
               </button>
             ))}
           </div>
@@ -382,7 +384,7 @@ function BookingTab() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            상담 방식
+            {t('counselingMethod')}
           </label>
           <div className="flex flex-wrap gap-4">
             <label className="flex items-center space-x-2 cursor-pointer">
@@ -394,7 +396,7 @@ function BookingTab() {
                 onChange={(e) => setConsultationType(e.target.value as 'face')}
                 className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
               />
-              <span className="text-gray-700">대면 상담</span>
+              <span className="text-gray-700">{t('faceToFace')}</span>
             </label>
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -405,7 +407,7 @@ function BookingTab() {
                 onChange={(e) => setConsultationType(e.target.value as 'phone')}
                 className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
               />
-              <span className="text-gray-700">전화 상담</span>
+              <span className="text-gray-700">{t('phoneCounseling')}</span>
             </label>
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -416,7 +418,7 @@ function BookingTab() {
                 onChange={(e) => setConsultationType(e.target.value as 'etc')}
                 className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
               />
-              <span className="text-gray-700">기타</span>
+              <span className="text-gray-700">{t('other')}</span>
             </label>
           </div>
           {consultationType === 'etc' && (
@@ -425,7 +427,7 @@ function BookingTab() {
                 type="text"
                 value={consultationTypeEtc}
                 onChange={(e) => setConsultationTypeEtc(e.target.value)}
-                placeholder="기타 상담 방식을 입력해 주세요"
+                placeholder={t('otherMethodPlaceholder')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               />
@@ -435,19 +437,19 @@ function BookingTab() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            상담 내용 (선택)
+            {t('counselingContent')}
           </label>
           <textarea
             value={content}
             onChange={e => setContent(e.target.value)}
             rows={4}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none [transform:translateZ(0)]"
-            placeholder="상담받고 싶은 내용을 간단히 적어 주세요."
+            placeholder={t('contentPlaceholder')}
           />
         </div>
 
         <Button type="submit" size="lg" className="w-full" disabled={loading}>
-          {loading ? '예약 처리 중...' : '예약 완료하기'}
+          {loading ? t('processingBooking') : t('completeBooking')}
         </Button>
       </form>
 
@@ -464,6 +466,7 @@ function BookingTab() {
 }
 
 function CheckTab() {
+  const { t, language } = useLanguage();
   const [studentNumber, setStudentNumber] = useState('');
   const [studentName, setStudentName] = useState('');
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -480,7 +483,7 @@ function CheckTab() {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentNumber.trim() || !studentName.trim()) {
-      alert('학번과 이름을 모두 입력해 주세요.');
+      alert(t('enterBothFields'));
       return;
     }
 
@@ -506,7 +509,7 @@ function CheckTab() {
       setSearched(true);
     } catch (error) {
       console.error('예약 조회 오류:', error);
-      alert('예약 조회에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      alert(t('searchError'));
     } finally {
       setLoading(false);
     }
@@ -515,8 +518,8 @@ function CheckTab() {
   const handleCancel = (reservation: Reservation) => {
     setConfirmModal({
       isOpen: true,
-      title: '예약 취소',
-      message: `${reservation.studentName}(${reservation.studentNumber})의 예약을 취소하시겠습니까?`,
+      title: t('cancelReservationTitle'),
+      message: `${reservation.studentName}(${reservation.studentNumber})`,
       cancelText: '취소',
       onConfirm: async () => {
         try {
@@ -532,10 +535,10 @@ function CheckTab() {
           // 예약 취소 성공 시에도 모달로 알림을 띄우는 것이 좋겠지만, 
           // 기존 로직 유지를 위해 alert 사용 또는 필요 시 변경 가능.
           // 여기서는 일단 alert 유지 (사용자 요청은 예약 완료 팝업이었음)
-          alert('예약이 취소되었습니다.');
+          alert(t('reservationCanceled'));
         } catch (error) {
-          console.error('예약 취소 오류:', error);
-          alert('예약 취소에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+          console.error('Cancel error:', error);
+          alert(t('cancelError'));
         }
       },
     });
@@ -551,13 +554,13 @@ function CheckTab() {
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="w-4 h-4 mr-2" />
-              학번
+              {t('studentNumber')}
             </label>
             <input
               type="text"
               value={studentNumber}
               onChange={e => setStudentNumber(e.target.value)}
-              placeholder="학번을 입력하세요"
+              placeholder={t('studentNumberPlaceholder')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent [transform:translateZ(0)]"
             />
           </div>
@@ -565,27 +568,27 @@ function CheckTab() {
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="w-4 h-4 mr-2" />
-              이름
+              {t('studentNameField')}
             </label>
             <input
               type="text"
               value={studentName}
               onChange={e => setStudentName(e.target.value)}
-              placeholder="이름을 입력하세요"
+              placeholder={t('studentNameFieldPlaceholder')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent [transform:translateZ(0)]"
             />
           </div>
         </div>
 
         <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={loading}>
-          {loading ? '조회 중...' : '예약 조회하기'}
+          {loading ? t('searching') : t('searchReservation')}
         </Button>
       </form>
 
       <div className="bg-white rounded-lg shadow-md p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-blue-600" />
-          예약 내역
+          {t('reservationHistory')}
         </h3>
 
         {loading && (
@@ -595,7 +598,7 @@ function CheckTab() {
         )}
 
         {!loading && searched && reservations.length === 0 && (
-          <p className="text-gray-600 text-sm">조회된 예약 내역이 없습니다.</p>
+          <p className="text-gray-600 text-sm">{t('noReservationFound')}</p>
         )}
 
         {!loading && reservations.length > 0 && (
@@ -606,9 +609,15 @@ function CheckTab() {
                 className="border border-gray-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
               >
                 <div className="space-y-1">
-                  <div className="font-medium text-gray-900 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-blue-600" />
-                    {formatDateKorean(reservation.date)}
+                  <div className="font-medium text-gray-900">
+                    <div className="flex gap-2 mb-2">
+                      <span className="text-xs font-semibold px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                        {formatDateI18n(reservation.date, language)}
+                      </span>
+                      <span className="text-xs font-semibold px-2 py-1 bg-gray-100 text-gray-700 rounded">
+                        {t('periodLabel', { number: reservation.period })}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-sm text-gray-700 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-gray-500" />
@@ -616,11 +625,12 @@ function CheckTab() {
                   </div>
                   <div className="text-sm text-gray-700 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-gray-500" />
-                    {reservation.topic}
+                    <span className="font-medium text-gray-700">{t('topicLabel')}</span>{' '}
+                    <span className="text-gray-600">{t(reservation.topic)}</span>
                   </div>
                   <div className="text-sm text-gray-700 flex items-center gap-2">
                     <User className="w-4 h-4 text-gray-500" />
-                    상담 방식: {reservation.consultationType === 'face' ? '대면 상담' : reservation.consultationType === 'phone' ? '전화 상담' : '기타'}
+                    {t('counselingMethodLabel')} {reservation.consultationType === 'face' ? t('faceToFace') : reservation.consultationType === 'phone' ? t('phoneCounseling') : t('other')}
                     {reservation.consultationType === 'etc' && reservation.consultationTypeEtc && ` (${reservation.consultationTypeEtc})`}
                   </div>
                 </div>
@@ -633,7 +643,7 @@ function CheckTab() {
                   onClick={() => handleCancel(reservation)}
                 >
                   <X className="w-4 h-4" />
-                  예약 취소
+                  {t('cancelReservation')}
                 </Button>
               </div>
             ))}
@@ -649,7 +659,7 @@ function CheckTab() {
         title={confirmModal.title}
         message={confirmModal.message}
         isDangerous={true}
-        confirmText="예약 취소"
+        confirmText={t('cancelReservation')}
         cancelText={confirmModal.cancelText}
       />
     </div >

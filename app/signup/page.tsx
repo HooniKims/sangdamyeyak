@@ -4,16 +4,17 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, Eye, EyeOff, User, GraduationCap, Users, AlertCircle, BookOpen } from 'lucide-react';
-import { signUpWithEmail, createUserProfile, signInWithGoogle } from '@/lib/auth-firebase';
+import { signUpWithEmail, createUserProfile, signInWithGoogle, checkTeacherDuplicate } from '@/lib/auth-firebase';
 import { auth } from '@/lib/firebase';
 import SchoolSearch from '@/components/SchoolSearch';
 import { SchoolInfo, UserRole } from '@/types/auth';
+import { useLanguage } from '@/lib/i18n';
 
 function SignUpForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { t } = useLanguage();
 
-    // Google 로그인에서 온 경우
     const isGoogleSignUp = searchParams.get('google') === 'true';
     const googleEmail = searchParams.get('email') || '';
     const googleName = searchParams.get('name') || '';
@@ -21,7 +22,6 @@ function SignUpForm() {
     const [step, setStep] = useState<'role' | 'info'>(isGoogleSignUp ? 'info' : 'role');
     const [role, setRole] = useState<UserRole>('teacher');
 
-    // 폼 데이터
     const [email, setEmail] = useState(googleEmail);
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -29,13 +29,11 @@ function SignUpForm() {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    // 학교 정보
     const [schoolName, setSchoolName] = useState('');
     const [schoolCode, setSchoolCode] = useState('');
     const [grade, setGrade] = useState(1);
     const [classNum, setClassNum] = useState(1);
 
-    // 학부모 전용
     const [studentName, setStudentName] = useState('');
 
     const [error, setError] = useState('');
@@ -50,54 +48,60 @@ function SignUpForm() {
         e.preventDefault();
         setError('');
 
-        // 유효성 검사
         if (!isGoogleSignUp) {
             if (password.length < 6) {
-                setError('비밀번호는 6자 이상이어야 합니다.');
+                setError(t('passwordTooShort'));
                 return;
             }
             if (password !== confirmPassword) {
-                setError('비밀번호가 일치하지 않습니다.');
+                setError(t('passwordMismatch'));
                 return;
             }
         }
 
         if (!name.trim()) {
-            setError('이름을 입력해주세요.');
+            setError(t('enterName'));
             return;
         }
 
         if (!schoolName.trim()) {
-            setError('학교를 선택해주세요.');
+            setError(t('selectSchool'));
             return;
         }
 
         if (role === 'parent' && !studentName.trim()) {
-            setError('학생 이름을 입력해주세요.');
+            setError(t('enterStudentName'));
             return;
         }
 
         setLoading(true);
 
         try {
+            // 교사 중복 가입 검사
+            if (role === 'teacher' && schoolCode) {
+                const isDuplicate = await checkTeacherDuplicate(schoolCode, grade, classNum);
+                if (isDuplicate) {
+                    setError(t('duplicateTeacher'));
+                    setLoading(false);
+                    return;
+                }
+            }
+
             let uid: string;
 
             if (isGoogleSignUp) {
-                // Google 로그인 사용자 → 이미 Firebase Auth에 등록됨
                 const currentUser = auth.currentUser;
                 if (!currentUser) {
-                    setError('Google 인증 정보를 찾을 수 없습니다. 다시 시도해주세요.');
+                    setError(t('googleAuthNotFound'));
                     setLoading(false);
                     return;
                 }
                 uid = currentUser.uid;
             } else {
-                // 이메일/비밀번호 회원가입
                 const user = await signUpWithEmail(email, password);
                 uid = user.uid;
             }
 
-            // Firestore에 프로필 저장
             await createUserProfile(uid, {
                 email: isGoogleSignUp ? googleEmail : email,
                 role,
@@ -113,11 +117,11 @@ function SignUpForm() {
         } catch (err: unknown) {
             const firebaseError = err as { code?: string };
             if (firebaseError.code === 'auth/email-already-in-use') {
-                setError('이미 가입된 이메일입니다.');
+                setError(t('emailAlreadyInUse'));
             } else if (firebaseError.code === 'auth/weak-password') {
-                setError('비밀번호가 너무 약합니다. 6자 이상으로 설정해주세요.');
+                setError(t('weakPassword'));
             } else {
-                setError('회원가입에 실패했습니다. 다시 시도해주세요.');
+                setError(t('signupFailed'));
             }
         } finally {
             setLoading(false);
@@ -134,26 +138,24 @@ function SignUpForm() {
                 setName(result.user.displayName || '');
                 setStep('info');
             } else {
-                // 이미 가입된 사용자
                 router.push('/');
             }
         } catch (err: unknown) {
             const firebaseError = err as { code?: string };
             if (firebaseError.code === 'auth/popup-closed-by-user' || firebaseError.code === 'auth/cancelled-popup-request') {
-                // Ignore user closing the popup
+                // ignore
             } else if (firebaseError.code === 'auth/operation-not-allowed') {
-                setError('Google 로그인 기능이 비활성화되어 있습니다. Firebase 콘솔에서 설정을 켜주세요.');
+                setError(t('googleLoginDisabled'));
             } else if (firebaseError.code === 'auth/popup-blocked') {
-                setError('팝업이 차단되었습니다. 브라우저 설정에서 팝업을 허용해주세요.');
+                setError(t('popupBlocked'));
             } else {
-                setError(`Google 로그인에 실패했습니다. (${firebaseError.code || '알 수 없는 오류'})`);
+                setError(`${t('googleLoginFailed')} (${firebaseError.code || ''})`);
             }
         } finally {
             setLoading(false);
         }
     };
 
-    // 역할 선택 단계
     if (step === 'role') {
         return (
             <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white relative overflow-hidden flex items-center justify-center">
@@ -166,41 +168,38 @@ function SignUpForm() {
                     <div className="text-center mb-8">
                         <Link href="/" className="inline-block">
                             <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent">
-                                스쿨홀릭
+                                {t('schoolholic')}
                             </h1>
                         </Link>
-                        <p className="text-blue-200/60 text-sm mt-2">회원가입</p>
+                        <p className="text-blue-200/60 text-sm mt-2">{t('signupTitle')}</p>
                     </div>
 
                     <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8">
-                        <h2 className="text-lg font-bold text-center text-white mb-6">어떤 역할로 가입하시겠어요?</h2>
+                        <h2 className="text-lg font-bold text-center text-white mb-6">{t('selectRole')}</h2>
 
                         <div className="grid grid-cols-2 gap-4 mb-6">
-                            {/* 교사 */}
                             <button
                                 onClick={() => { setRole('teacher'); setStep('info'); }}
                                 className="group p-6 bg-white/5 hover:bg-emerald-500/15 border border-white/10 hover:border-emerald-400/40 rounded-2xl transition-all duration-300 hover:-translate-y-1"
                             >
                                 <GraduationCap className="w-10 h-10 text-emerald-400 mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                                <h3 className="font-bold text-white">교사</h3>
-                                <p className="text-xs text-white/50 mt-1">알림장 작성, 상담 관리</p>
+                                <h3 className="font-bold text-white">{t('teacher')}</h3>
+                                <p className="text-xs text-white/50 mt-1">{t('teacherDesc')}</p>
                             </button>
 
-                            {/* 학부모 */}
                             <button
                                 onClick={() => { setRole('parent'); setStep('info'); }}
                                 className="group p-6 bg-white/5 hover:bg-blue-500/15 border border-white/10 hover:border-blue-400/40 rounded-2xl transition-all duration-300 hover:-translate-y-1"
                             >
                                 <Users className="w-10 h-10 text-blue-400 mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                                <h3 className="font-bold text-white">학부모</h3>
-                                <p className="text-xs text-white/50 mt-1">알림장 확인, 상담 예약</p>
+                                <h3 className="font-bold text-white">{t('parent')}</h3>
+                                <p className="text-xs text-white/50 mt-1">{t('parentDesc')}</p>
                             </button>
                         </div>
 
-                        {/* Google 회원가입 */}
                         <div className="flex items-center gap-4 my-5">
                             <div className="flex-1 h-px bg-white/10" />
-                            <span className="text-xs text-white/40">또는</span>
+                            <span className="text-xs text-white/40">{t('orDivider')}</span>
                             <div className="flex-1 h-px bg-white/10" />
                         </div>
 
@@ -215,7 +214,7 @@ function SignUpForm() {
                                 <path fill="#FBBC05" d="M5.12 13.82a7.18 7.18 0 0 1 0-3.64V7.32H1.46a11.99 11.99 0 0 0 0 9.36l3.66-2.86z" />
                                 <path fill="#EA4335" d="M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11.94 11.94 0 0 0 12 1 11.99 11.99 0 0 0 1.46 7.32l3.66 2.86A7.14 7.14 0 0 1 12 4.75z" />
                             </svg>
-                            Google 계정으로 시작하기
+                            {t('startWithGoogle')}
                         </button>
 
                         {error && (
@@ -226,9 +225,9 @@ function SignUpForm() {
                         )}
 
                         <p className="text-center text-sm text-white/50 mt-6">
-                            이미 계정이 있으신가요?{' '}
+                            {t('alreadyHaveAccount')}{' '}
                             <Link href="/login" className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
-                                로그인
+                                {t('login')}
                             </Link>
                         </p>
                     </div>
@@ -237,7 +236,6 @@ function SignUpForm() {
         );
     }
 
-    // 정보 입력 단계
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
@@ -249,17 +247,16 @@ function SignUpForm() {
                 <div className="text-center mb-8">
                     <Link href="/" className="inline-block">
                         <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-cyan-100 to-emerald-200 bg-clip-text text-transparent">
-                            스쿨홀릭
+                            {t('schoolholic')}
                         </h1>
                     </Link>
                     <p className="text-blue-200/60 text-sm mt-2">
-                        {role === 'teacher' ? '교사' : '학부모'} 회원가입
+                        {role === 'teacher' ? t('teacherSignup') : t('parentSignup')}
                     </p>
                 </div>
 
                 <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8">
                     <form onSubmit={handleSubmit} className="space-y-5">
-                        {/* 역할 표시 */}
                         <div className="flex items-center gap-2 p-3 bg-white/5 rounded-xl border border-white/10">
                             {role === 'teacher' ? (
                                 <GraduationCap className="w-5 h-5 text-emerald-400" />
@@ -267,7 +264,7 @@ function SignUpForm() {
                                 <Users className="w-5 h-5 text-blue-400" />
                             )}
                             <span className="text-sm font-medium text-white">
-                                {role === 'teacher' ? '교사' : '학부모'}로 가입
+                                {t('signupAs', { role: role === 'teacher' ? t('teacher') : t('parent') })}
                             </span>
                             {!isGoogleSignUp && (
                                 <button
@@ -275,7 +272,7 @@ function SignUpForm() {
                                     onClick={() => setStep('role')}
                                     className="ml-auto text-xs text-cyan-400/70 hover:text-cyan-400"
                                 >
-                                    변경
+                                    {t('change')}
                                 </button>
                             )}
                         </div>
@@ -287,18 +284,17 @@ function SignUpForm() {
                             </div>
                         )}
 
-                        {/* 이메일 (Google 가입 시 비활성화) */}
                         {!isGoogleSignUp && (
                             <>
                                 <div>
-                                    <label className="block text-sm font-medium text-white/70 mb-1.5">이메일</label>
+                                    <label className="block text-sm font-medium text-white/70 mb-1.5">{t('email')}</label>
                                     <div className="relative">
                                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
                                         <input
                                             type="email"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
-                                            placeholder="example@email.com"
+                                            placeholder={t('emailPlaceholder')}
                                             required
                                             className="w-full pl-11 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
                                         />
@@ -306,14 +302,14 @@ function SignUpForm() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-white/70 mb-1.5">비밀번호</label>
+                                    <label className="block text-sm font-medium text-white/70 mb-1.5">{t('password')}</label>
                                     <div className="relative">
                                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
                                         <input
                                             type={showPassword ? 'text' : 'password'}
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
-                                            placeholder="6자 이상"
+                                            placeholder={t('passwordMinLength')}
                                             required
                                             minLength={6}
                                             className="w-full pl-11 pr-12 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
@@ -329,14 +325,14 @@ function SignUpForm() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-white/70 mb-1.5">비밀번호 확인</label>
+                                    <label className="block text-sm font-medium text-white/70 mb-1.5">{t('confirmPassword')}</label>
                                     <div className="relative">
                                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
                                         <input
                                             type={showConfirmPassword ? 'text' : 'password'}
                                             value={confirmPassword}
                                             onChange={(e) => setConfirmPassword(e.target.value)}
-                                            placeholder="비밀번호 재입력"
+                                            placeholder={t('confirmPasswordPlaceholder')}
                                             required
                                             className="w-full pl-11 pr-12 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
                                         />
@@ -352,32 +348,29 @@ function SignUpForm() {
                             </>
                         )}
 
-                        {/* 이름 */}
                         <div>
-                            <label className="block text-sm font-medium text-white/70 mb-1.5">이름</label>
+                            <label className="block text-sm font-medium text-white/70 mb-1.5">{t('name')}</label>
                             <div className="relative">
                                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
                                 <input
                                     type="text"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    placeholder="이름을 입력하세요"
+                                    placeholder={t('namePlaceholder')}
                                     required
                                     className="w-full pl-11 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
                                 />
                             </div>
                         </div>
 
-                        {/* 학교 검색 */}
                         <div>
-                            <label className="block text-sm font-medium text-white/70 mb-1.5">학교</label>
+                            <label className="block text-sm font-medium text-white/70 mb-1.5">{t('school')}</label>
                             <SchoolSearch value={schoolName} onSelect={handleSchoolSelect} />
                         </div>
 
-                        {/* 학년 & 반 */}
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-sm font-medium text-white/70 mb-1.5">학년</label>
+                                <label className="block text-sm font-medium text-white/70 mb-1.5">{t('grade')}</label>
                                 <select
                                     value={grade}
                                     onChange={(e) => setGrade(Number(e.target.value))}
@@ -385,14 +378,14 @@ function SignUpForm() {
                                 >
                                     {[1, 2, 3, 4, 5, 6].map((g) => (
                                         <option key={g} value={g} className="bg-slate-800 text-white">
-                                            {g}학년
+                                            {g}{t('gradeUnit')}
                                         </option>
                                     ))}
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-white/70 mb-1.5">
-                                    {role === 'teacher' ? '담임반' : '반'}
+                                    {role === 'teacher' ? t('homeroom') : t('classNum')}
                                 </label>
                                 <select
                                     value={classNum}
@@ -401,35 +394,33 @@ function SignUpForm() {
                                 >
                                     {Array.from({ length: 15 }, (_, i) => i + 1).map((c) => (
                                         <option key={c} value={c} className="bg-slate-800 text-white">
-                                            {c}반
+                                            {c}{t('classUnit')}
                                         </option>
                                     ))}
                                 </select>
                             </div>
                         </div>
 
-                        {/* 학부모: 학생 이름 */}
                         {role === 'parent' && (
                             <div>
-                                <label className="block text-sm font-medium text-white/70 mb-1.5">학생 이름</label>
+                                <label className="block text-sm font-medium text-white/70 mb-1.5">{t('studentName')}</label>
                                 <div className="relative">
                                     <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
                                     <input
                                         type="text"
                                         value={studentName}
                                         onChange={(e) => setStudentName(e.target.value)}
-                                        placeholder="자녀 이름을 입력하세요"
+                                        placeholder={t('studentNamePlaceholder')}
                                         required
                                         className="w-full pl-11 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all"
                                     />
                                 </div>
                                 <p className="text-xs text-white/40 mt-1.5">
-                                    입력한 학교/학년/반 정보로 담임 교사와 자동 매칭됩니다.
+                                    {t('studentNameHint')}
                                 </p>
                             </div>
                         )}
 
-                        {/* Submit */}
                         <button
                             type="submit"
                             disabled={loading}
@@ -438,17 +429,17 @@ function SignUpForm() {
                             {loading ? (
                                 <span className="flex items-center justify-center gap-2">
                                     <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                    가입 중...
+                                    {t('signingUp')}
                                 </span>
                             ) : (
-                                '가입하기'
+                                t('signupButton')
                             )}
                         </button>
 
                         <p className="text-center text-sm text-white/50 mt-4">
-                            이미 계정이 있으신가요?{' '}
+                            {t('alreadyHaveAccount')}{' '}
                             <Link href="/login" className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
-                                로그인
+                                {t('login')}
                             </Link>
                         </p>
                     </form>

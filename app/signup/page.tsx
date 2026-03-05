@@ -19,8 +19,10 @@ function SignUpForm() {
     const googleEmail = searchParams.get('email') || '';
     const googleName = searchParams.get('name') || '';
 
-    const [step, setStep] = useState<'role' | 'info'>(isGoogleSignUp ? 'info' : 'role');
+    const [step, setStep] = useState<'role' | 'info'>('role');
     const [role, setRole] = useState<UserRole>('teacher');
+    const [googleAuthenticated, setGoogleAuthenticated] = useState(false);
+    const isGoogleFlow = isGoogleSignUp || googleAuthenticated;
 
     const [email, setEmail] = useState(googleEmail);
     const [password, setPassword] = useState('');
@@ -48,7 +50,7 @@ function SignUpForm() {
         e.preventDefault();
         setError('');
 
-        if (!isGoogleSignUp) {
+        if (!isGoogleFlow) {
             if (password.length < 6) {
                 setError(t('passwordTooShort'));
                 return;
@@ -94,7 +96,7 @@ function SignUpForm() {
 
             let uid: string;
 
-            if (isGoogleSignUp) {
+            if (isGoogleFlow) {
                 const currentUser = auth.currentUser;
                 if (!currentUser) {
                     setError(t('googleAuthNotFound'));
@@ -108,7 +110,7 @@ function SignUpForm() {
             }
 
             await createUserProfile(uid, {
-                email: isGoogleSignUp ? googleEmail : email,
+                email: isGoogleFlow ? (googleEmail || email) : email,
                 role,
                 name,
                 schoolName,
@@ -141,7 +143,8 @@ function SignUpForm() {
             if (result.isNewUser) {
                 setEmail(result.user.email || '');
                 setName(result.user.displayName || '');
-                setStep('info');
+                setGoogleAuthenticated(true);
+                // 역할 선택 화면에 머무름 (step은 이미 'role')
             } else {
                 router.push('/');
             }
@@ -202,25 +205,35 @@ function SignUpForm() {
                             </button>
                         </div>
 
-                        <div className="flex items-center gap-4 my-5">
-                            <div className="flex-1 h-px bg-white/10" />
-                            <span className="text-xs text-white/40">{t('orDivider')}</span>
-                            <div className="flex-1 h-px bg-white/10" />
-                        </div>
+                        {!isGoogleFlow && (
+                            <>
+                                <div className="flex items-center gap-4 my-5">
+                                    <div className="flex-1 h-px bg-white/10" />
+                                    <span className="text-xs text-white/40">{t('orDivider')}</span>
+                                    <div className="flex-1 h-px bg-white/10" />
+                                </div>
 
-                        <button
-                            onClick={handleGoogleSignUp}
-                            disabled={loading}
-                            className="w-full py-3 bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                        >
-                            <svg className="w-5 h-5" viewBox="0 0 24 24">
-                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77a7.15 7.15 0 0 1-10.6-3.75H1.46v2.86A11.99 11.99 0 0 0 12 23z" />
-                                <path fill="#FBBC05" d="M5.12 13.82a7.18 7.18 0 0 1 0-3.64V7.32H1.46a11.99 11.99 0 0 0 0 9.36l3.66-2.86z" />
-                                <path fill="#EA4335" d="M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11.94 11.94 0 0 0 12 1 11.99 11.99 0 0 0 1.46 7.32l3.66 2.86A7.14 7.14 0 0 1 12 4.75z" />
-                            </svg>
-                            {t('startWithGoogle')}
-                        </button>
+                                <button
+                                    onClick={handleGoogleSignUp}
+                                    disabled={loading}
+                                    className="w-full py-3 bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                >
+                                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+                                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77a7.15 7.15 0 0 1-10.6-3.75H1.46v2.86A11.99 11.99 0 0 0 12 23z" />
+                                        <path fill="#FBBC05" d="M5.12 13.82a7.18 7.18 0 0 1 0-3.64V7.32H1.46a11.99 11.99 0 0 0 0 9.36l3.66-2.86z" />
+                                        <path fill="#EA4335" d="M12 4.75c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11.94 11.94 0 0 0 12 1 11.99 11.99 0 0 0 1.46 7.32l3.66 2.86A7.14 7.14 0 0 1 12 4.75z" />
+                                    </svg>
+                                    {t('startWithGoogle')}
+                                </button>
+                            </>
+                        )}
+
+                        {isGoogleFlow && (
+                            <p className="text-center text-sm text-emerald-300/80 mt-2">
+                                ✅ Google 계정 인증 완료 — 가입 유형을 선택해주세요
+                            </p>
+                        )}
 
                         {error && (
                             <div className="flex items-start gap-2 p-3 bg-red-500/15 border border-red-400/30 rounded-xl mt-4">
@@ -271,15 +284,13 @@ function SignUpForm() {
                             <span className="text-sm font-medium text-white">
                                 {t('signupAs', { role: role === 'teacher' ? t('teacher') : t('parent') })}
                             </span>
-                            {!isGoogleSignUp && (
-                                <button
-                                    type="button"
-                                    onClick={() => setStep('role')}
-                                    className="ml-auto text-xs text-cyan-400/70 hover:text-cyan-400"
-                                >
-                                    {t('change')}
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                onClick={() => setStep('role')}
+                                className="ml-auto text-xs text-cyan-400/70 hover:text-cyan-400"
+                            >
+                                {t('change')}
+                            </button>
                         </div>
 
                         {error && (
@@ -289,7 +300,7 @@ function SignUpForm() {
                             </div>
                         )}
 
-                        {!isGoogleSignUp && (
+                        {!isGoogleFlow && (
                             <>
                                 <div>
                                     <label className="block text-sm font-medium text-white/70 mb-1.5">{t('email')}</label>

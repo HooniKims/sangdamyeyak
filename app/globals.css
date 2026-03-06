@@ -54,6 +54,13 @@ body {
    모바일 반응형 최적화
    ============================================ */
 
+/* textarea 내부 스크롤 시 페이지 전체 스크롤 방지 */
+textarea {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* 터치 타겟 최소 사이즈 */
 @media (max-width: 640px) {
 

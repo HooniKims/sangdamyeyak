@@ -24,7 +24,7 @@ export default function Layout({ children, title, description }: LayoutProps) {
             )}
           </div>
         )}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden transition-colors duration-300">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 transition-colors duration-300">
           {children}
         </div>
       </div>

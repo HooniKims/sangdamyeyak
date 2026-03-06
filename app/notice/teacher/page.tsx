@@ -298,7 +298,7 @@ export default function NoticeTeacherPage() {
                                             placeholder={t('aiPlaceholder')}
                                         />
                                     ) : (
-                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 min-h-[200px] overflow-y-auto max-h-[400px] prose prose-sm max-w-none">
+                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 min-h-[200px] prose prose-sm max-w-none">
                                             <ReactMarkdown
                                                 remarkPlugins={[remarkGfm]}
                                                 components={{

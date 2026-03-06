@@ -120,7 +120,7 @@ export default function NoticeParentsPage() {
                             </h2>
 
                             {isLoading ? (
-                                <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
+                                <div className="flex flex-col items-center justify-center min-h-[300px] text-gray-400">
                                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mb-3"></div>
                                     <p>{t('loadingNotice')}</p>
                                 </div>
@@ -138,7 +138,7 @@ export default function NoticeParentsPage() {
                                     </ReactMarkdown>
                                 </div>
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
+                                <div className="flex flex-col items-center justify-center min-h-[300px] text-gray-400">
                                     <MessageCircle size={48} className="mb-4 opacity-50" />
                                     <p className="font-medium">{t('noNoticeForDate')}</p>
                                     <p className="text-sm">{t('tryAnotherDate')}</p>

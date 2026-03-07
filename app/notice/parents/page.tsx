@@ -1,19 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import ReactCalendar from 'react-calendar';
 import { format } from 'date-fns';
 import { ko, enUS } from 'date-fns/locale';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { MessageCircle, ArrowLeft, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import 'react-calendar/dist/Calendar.css';
 import { getNoteByDate } from '@/lib/notice-firebase';
 import { useAuth } from '@/components/AuthContext';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { NoticeMarkdown } from '@/components/NoticeMarkdown';
 import { useLanguage } from '@/lib/i18n';
 
 export default function NoticeParentsPage() {
@@ -126,16 +123,7 @@ export default function NoticeParentsPage() {
                                 </div>
                             ) : summary ? (
                                 <div className="prose prose-sm max-w-none">
-                                    <ReactMarkdown
-                                        remarkPlugins={[remarkGfm]}
-                                        components={{
-                                            a: ({ node, ...props }) => (
-                                                <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 underline" />
-                                            )
-                                        }}
-                                    >
-                                        {summary}
-                                    </ReactMarkdown>
+                                    <NoticeMarkdown content={summary} />
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center min-h-[300px] text-gray-400">

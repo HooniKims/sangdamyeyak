@@ -363,7 +363,7 @@ export async function deleteAccount(): Promise<void> {
     try {
         // Firebase Auth 사용자 삭제
         await deleteUser(user);
-    } catch (error: any) {
+    } catch (error: unknown) {
         // 복구 시도
         if (profileData) {
             await setDoc(doc(db, 'users', uid), profileData);

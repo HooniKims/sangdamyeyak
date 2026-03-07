@@ -122,6 +122,16 @@
   - [x] `Layout.tsx` 카드 래퍼의 `overflow-hidden` 제거 (터치 스크롤 차단 원인)
   - [x] 알림장 교사 페이지 AI 결과 미리보기 `max-h-[400px]` 제거 (콘텐츠 잘림 원인)
   - [x] 알림장 학부모 페이지 빈 상태 영역 `h-[300px]` → `min-h-[300px]` 변경
+- [x] 모바일 textarea 내부 스크롤 시 페이지 전체 스크롤 방지 (`overscroll-behavior: contain` 전역 적용)
+- [x] 알림장 URL 자동 하이퍼링크 처리
+  - [x] `components/NoticeMarkdown.tsx` 공통 렌더러 추가
+  - [x] 직접 입력/붙여넣기한 URL 및 bare domain을 저장 후 클릭 가능한 링크로 자동 변환
+  - [x] 기존 마크다운 링크, 코드 블록, 이미지 등은 자동 변환 대상에서 제외
+- [x] 운영 안정성 기준 lint 오류 3건 수정
+  - [x] `components/UserProfileModal.tsx`, `lib/auth-firebase.ts`의 `catch (error: any)` 제거 및 안전한 에러 속성 추출 적용
+  - [x] `lib/i18n.ts`의 언어 상태를 `useSyncExternalStore` 기반으로 정리해 effect 내 직접 `setState` 제거
+  - [x] `npm run lint`, `npx tsc --noEmit`, `npm run build` 검증 완료
+- [x] 최신 변경 사항 깃허브 업로드 (`main` 브랜치)
 ## 예정된 작업
 - [x] 교사와 학부모 매칭 누락 문제 해결 (가입 순서 무관 매칭 또는 로그인 시 매칭 갱신 등)
 - [x] 구글 계정으로 가입/로그인 시 역할(교사/학부모) 선택 없이 가입되는 문제 해결 (가입 시 역할 선택 화면 추가)

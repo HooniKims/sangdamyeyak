@@ -15,6 +15,17 @@ interface UserProfileModalProps {
 
 type ModalStep = 'profile' | 'confirm' | 'complete';
 
+function getErrorDetails(error: unknown) {
+    if (typeof error !== 'object' || error === null) {
+        return { code: '', message: '' };
+    }
+
+    const code = 'code' in error && typeof error.code === 'string' ? error.code : '';
+    const message = 'message' in error && typeof error.message === 'string' ? error.message : '';
+
+    return { code, message };
+}
+
 export default function UserProfileModal({
     isOpen,
     onClose,
@@ -45,9 +56,10 @@ export default function UserProfileModal({
         try {
             await onDeleteAccount();
             setStep('complete');
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const { code, message } = getErrorDetails(error);
             console.error(t('deleteAccountError'), error);
-            if (error?.code === 'auth/requires-recent-login' || error?.message?.includes('requires-recent-login')) {
+            if (code === 'auth/requires-recent-login' || message.includes('requires-recent-login')) {
                 setError(t('reloginRequired'));
             } else {
                 setError(t('deleteFailed2'));

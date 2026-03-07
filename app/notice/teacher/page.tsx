@@ -1,18 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import ReactCalendar from 'react-calendar';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Sparkles, Save, Trash2, Loader2, List, X, CheckSquare, Square, ArrowLeft } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import 'react-calendar/dist/Calendar.css';
 import { summarizeNote, AVAILABLE_MODELS, DEFAULT_MODEL } from '@/lib/notice-ai';
 import { saveNote, getNoteByDate, deleteNote, getAllNotes } from '@/lib/notice-firebase';
 import { useAuth } from '@/components/AuthContext';
+import { NoticeMarkdown } from '@/components/NoticeMarkdown';
 import { useLanguage } from '@/lib/i18n';
 
 export default function NoticeTeacherPage() {
@@ -67,7 +66,7 @@ export default function NoticeTeacherPage() {
         };
 
         loadNote();
-    }, [date, user]);
+    }, [date, user, t]);
 
 
 
@@ -299,16 +298,7 @@ export default function NoticeTeacherPage() {
                                         />
                                     ) : (
                                         <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 min-h-[200px] prose prose-sm max-w-none">
-                                            <ReactMarkdown
-                                                remarkPlugins={[remarkGfm]}
-                                                components={{
-                                                    a: ({ node, ...props }) => (
-                                                        <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 underline" />
-                                                    )
-                                                }}
-                                            >
-                                                {summary}
-                                            </ReactMarkdown>
+                                            <NoticeMarkdown content={summary} />
                                         </div>
                                     )}
                                 </div>

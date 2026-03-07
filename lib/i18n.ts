@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
 
 export type Language = 'ko' | 'en';
 
@@ -635,6 +635,60 @@ interface LanguageContextType {
     t: (key: string, params?: Record<string, string | number>) => string;
 }
 
+const LANGUAGE_STORAGE_KEY = 'schoolholic-lang';
+const LANGUAGE_CHANGE_EVENT = 'schoolholic-language-change';
+let memoryLanguage: Language = 'ko';
+
+function isLanguage(value: unknown): value is Language {
+    return value === 'ko' || value === 'en';
+}
+
+function readStoredLanguage(): Language {
+    if (typeof window === 'undefined') {
+        return 'ko';
+    }
+
+    try {
+        const saved = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        if (isLanguage(saved)) {
+            memoryLanguage = saved;
+            return saved;
+        }
+    } catch {
+        // localStorage unavailable
+    }
+
+    return memoryLanguage;
+}
+
+function getServerLanguageSnapshot(): Language {
+    return 'ko';
+}
+
+function subscribeLanguage(onStoreChange: () => void) {
+    if (typeof window === 'undefined') {
+        return () => { };
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+        if (event.key === null || event.key === LANGUAGE_STORAGE_KEY) {
+            onStoreChange();
+        }
+    };
+
+    const handleLanguageChange = () => {
+        onStoreChange();
+    };
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener(LANGUAGE_CHANGE_EVENT, handleLanguageChange);
+
+    return () => {
+        window.removeEventListener('storage', handleStorage);
+        window.removeEventListener(LANGUAGE_CHANGE_EVENT, handleLanguageChange);
+    };
+}
+
 const LanguageContext = createContext<LanguageContextType>({
     language: 'ko',
     setLanguage: () => { },
@@ -642,26 +696,17 @@ const LanguageContext = createContext<LanguageContextType>({
 });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-    const [language, setLanguageState] = useState<Language>('ko');
-
-    // localStorage에서 언어 설정 로드
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem('schoolholic-lang') as Language;
-            if (saved === 'en' || saved === 'ko') {
-                setLanguageState(saved);
-            }
-        } catch {
-            // SSR or localStorage unavailable
-        }
-    }, []);
-
+    const language = useSyncExternalStore<Language>(subscribeLanguage, readStoredLanguage, getServerLanguageSnapshot);
     const setLanguage = useCallback((lang: Language) => {
-        setLanguageState(lang);
+        memoryLanguage = lang;
         try {
-            localStorage.setItem('schoolholic-lang', lang);
+            window.localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
         } catch {
             // ignore
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event(LANGUAGE_CHANGE_EVENT));
         }
     }, []);
 

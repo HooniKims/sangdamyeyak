@@ -2,16 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
-  limit,
   onSnapshot,
   query,
   runTransaction,
-  updateDoc,
   where,
 } from 'firebase/firestore';
 import { Calendar, CalendarPlus, CheckCircle2, Clock, MessageSquare, Search, User, X } from 'lucide-react';
@@ -20,18 +16,19 @@ import Layout from '@/components/Layout';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ConfirmModal from '@/components/ConfirmModal';
-import { AvailableSlot, COUNSELING_TOPICS, CounselingTopic, Period, Reservation, DEFAULT_PERIODS } from '@/types';
-import { formatDateI18n } from '@/lib/utils';
+import { AvailableSlot, COUNSELING_TOPICS, CounselingTopic, Reservation } from '@/types';
+import { formatDate, formatDateI18n } from '@/lib/utils';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthContext';
 import { useLanguage } from '@/lib/i18n';
 
 type Tab = 'book' | 'check';
+const SLOT_ALREADY_RESERVED_ERROR = 'slot-already-reserved';
 
 export default function ParentPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('book');
 
   // 로그인 안 된 상태면 로그인 페이지로 이동
@@ -89,7 +86,7 @@ export default function ParentPage() {
 type Step = 1 | 2 | 3;
 
 function BookingTab() {
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const { t, language } = useLanguage();
   const [step, setStep] = useState<Step>(1);
   const [studentNumber, setStudentNumber] = useState('');
@@ -101,7 +98,6 @@ function BookingTab() {
   const [consultationType, setConsultationType] = useState<'face' | 'phone' | 'etc'>('face');
   const [consultationTypeEtc, setConsultationTypeEtc] = useState('');
   const [loading, setLoading] = useState(false);
-  const [periods] = useState<Period[]>(DEFAULT_PERIODS);
   const [teacherId, setTeacherId] = useState<string>('');
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -127,7 +123,6 @@ function BookingTab() {
     const q = query(
       collection(db, 'availableSlots'),
       where('teacherId', '==', teacherId),
-      where('status', '==', 'available'),
     );
 
     const unsubscribe = onSnapshot(q, snapshot => {
@@ -136,7 +131,7 @@ function BookingTab() {
         slots.push({ id: docSnap.id, ...(docSnap.data() as Omit<AvailableSlot, 'id'>) });
       });
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDate(new Date());
       const filtered = slots
         .filter(slot => slot.date >= today)
         .sort((a, b) => a.date.localeCompare(b.date) || a.period - b.period);
@@ -146,6 +141,24 @@ function BookingTab() {
 
     return () => unsubscribe();
   }, [teacherId]);
+
+  useEffect(() => {
+    if (!selectedSlot) return;
+
+    const latestSelectedSlot = availableSlots.find(slot => slot.id === selectedSlot.id);
+
+    if (!latestSelectedSlot) {
+      setSelectedSlot(null);
+      if (step === 3) {
+        setStep(2);
+      }
+      return;
+    }
+
+    if (latestSelectedSlot !== selectedSlot) {
+      setSelectedSlot(latestSelectedSlot);
+    }
+  }, [availableSlots, selectedSlot, step]);
 
   const handleStudentInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,16 +170,31 @@ function BookingTab() {
   };
 
   const handleSlotSelect = (slot: AvailableSlot) => {
+    if (slot.status !== 'available') {
+      return;
+    }
+
     setSelectedSlot(slot);
     setStep(3);
   };
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSlot) return;
+    if (!selectedSlot || selectedSlot.status !== 'available') {
+      setConfirmModal({
+        isOpen: true,
+        title: t('bookingFailed'),
+        message: t('alreadyReserved'),
+        cancelText: null,
+        onConfirm: () => {
+          setStep(2);
+        },
+      });
+      return;
+    }
 
     if (consultationType === 'etc' && !consultationTypeEtc.trim()) {
-      alert('기타 상담 방식을 입력해 주세요.');
+      alert(t('enterOtherMethod'));
       return;
     }
 
@@ -179,7 +207,7 @@ function BookingTab() {
         const slotDoc = await transaction.get(slotRef);
 
         if (!slotDoc.exists() || slotDoc.data().status !== 'available') {
-          throw new Error('이미 예약된 시간이거나 슬롯을 찾을 수 없습니다.');
+          throw new Error(SLOT_ALREADY_RESERVED_ERROR);
         }
 
         transaction.update(slotRef, { status: 'reserved' });
@@ -220,10 +248,15 @@ function BookingTab() {
       });
     } catch (error) {
       console.error('예약 오류:', error);
+      const message =
+        error instanceof Error && error.message === SLOT_ALREADY_RESERVED_ERROR
+          ? t('alreadyReserved')
+          : t('bookingFailedMsg');
+
       setConfirmModal({
         isOpen: true,
         title: t('bookingFailed'),
-        message: t('bookingFailedMsg'),
+        message,
         cancelText: null,
         onConfirm: () => {
           setStep(2); // On error, return to the time selection step
@@ -291,35 +324,54 @@ function BookingTab() {
         </div>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          {t('selectAvailableTime')}
+          {t('selectTimeSlot')}
         </h3>
+        <p className="mb-4 text-sm text-gray-500">
+          {t('reservedSlotHint')}
+        </p>
 
         {availableSlots.length === 0 ? (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
             <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-            <p className="text-gray-600">{t('noAvailableTime')}</p>
+            <p className="text-gray-600">{t('noTimeSlots')}</p>
           </div>
         ) : (
           <div className="space-y-3">
             {availableSlots.map(slot => {
-              const period = periods.find(p => p.number === slot.period);
+              const isReserved = slot.status === 'reserved';
+              const isSelected = !isReserved && selectedSlot?.id === slot.id;
+
               return (
                 <button
                   key={slot.id}
                   type="button"
                   onClick={() => handleSlotSelect(slot)}
-                  className="w-full p-4 text-left bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg transition-all flex items-center justify-between"
+                  disabled={isReserved}
+                  className={`w-full rounded-lg border p-4 text-left flex items-center justify-between transition-all ${
+                    isReserved
+                      ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                      : isSelected
+                        ? 'border-blue-600 bg-blue-50 shadow-sm'
+                        : 'border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
                 >
                   <div>
-                    <div className="font-medium text-gray-900">
+                    <div className={`font-medium ${isReserved ? 'text-gray-500' : 'text-gray-900'}`}>
                       {formatDateI18n(slot.date, language)}{' '}
                       {t('periodLabel', { number: slot.period })}
                     </div>
-                    <div className="text-sm text-gray-600">
+                    <div className={`text-sm ${isReserved ? 'text-gray-400' : 'text-gray-600'}`}>
                       {slot.startTime} ~ {slot.endTime}
                     </div>
                   </div>
-                  <Calendar className="w-5 h-5 text-blue-500" />
+                  <div className="flex items-center gap-2">
+                    {isReserved && (
+                      <span className="rounded-full bg-gray-200 px-2 py-1 text-xs font-semibold text-gray-600">
+                        {t('reserved')}
+                      </span>
+                    )}
+                    <Calendar className={`w-5 h-5 ${isReserved ? 'text-gray-400' : 'text-blue-500'}`} />
+                  </div>
                 </button>
               );
             })}
@@ -333,8 +385,18 @@ function BookingTab() {
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       {selectedSlot && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
-          <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
+        <div
+          className={`mb-6 rounded-lg border p-4 flex items-start gap-3 ${
+            selectedSlot.status === 'available'
+              ? 'border-blue-200 bg-blue-50'
+              : 'border-amber-200 bg-amber-50'
+          }`}
+        >
+          <Clock
+            className={`mt-0.5 w-5 h-5 ${
+              selectedSlot.status === 'available' ? 'text-blue-600' : 'text-amber-600'
+            }`}
+          />
           <div>
             <div className="font-medium text-gray-900 mb-1">
               {formatDateI18n(selectedSlot.date, language)}{' '}
@@ -343,6 +405,11 @@ function BookingTab() {
             <div className="text-sm text-gray-700">
               {selectedSlot.startTime} ~ {selectedSlot.endTime}
             </div>
+            {selectedSlot.status === 'reserved' && (
+              <div className="mt-2 text-sm text-amber-700">
+                {t('selectedSlotReservedNotice')}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -435,7 +502,27 @@ function BookingTab() {
           />
         </div>
 
-        <Button type="submit" size="lg" className="w-full" disabled={loading}>
+        {selectedSlot?.status === 'reserved' && (
+          <Button
+            type="button"
+            size="lg"
+            variant="secondary"
+            className="w-full"
+            onClick={() => {
+              setSelectedSlot(null);
+              setStep(2);
+            }}
+          >
+            {t('chooseAnotherTime')}
+          </Button>
+        )}
+
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          disabled={loading || selectedSlot?.status !== 'available'}
+        >
           {loading ? t('processingBooking') : t('completeBooking')}
         </Button>
       </form>

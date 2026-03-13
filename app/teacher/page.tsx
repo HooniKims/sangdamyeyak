@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
-import { collection, addDoc, getDocs, deleteDoc, doc, query, where, onSnapshot, updateDoc, runTransaction } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, where, onSnapshot, updateDoc, runTransaction, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import Layout from '@/components/Layout';
@@ -10,11 +10,13 @@ import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ConfirmModal from '@/components/ConfirmModal';
 import { Period, AvailableSlot, Reservation, DEFAULT_PERIODS } from '@/types';
-import { formatDate, formatDateI18n, generateId } from '@/lib/utils';
-import { Clock, Trash2, Settings, Calendar as CalendarIcon, Download, X, Home } from 'lucide-react';
+import { formatDate, formatDateI18n } from '@/lib/utils';
+import { Clock, Trash2, Settings, Calendar as CalendarIcon, Download, X, Home, CheckSquare, Square } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/components/AuthContext';
 import { useLanguage } from '@/lib/i18n';
+
+const BULK_DELETE_BATCH_SIZE = 400;
 
 export default function TeacherPage() {
   const { user, loading: authLoading } = useAuth();
@@ -28,6 +30,7 @@ export default function TeacherPage() {
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [selectedPeriods, setSelectedPeriods] = useState<{ [date: string]: number[] }>({});
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+  const [selectedSlotIds, setSelectedSlotIds] = useState<Set<string>>(new Set());
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -36,6 +39,8 @@ export default function TeacherPage() {
     title: '',
     message: '',
     onConfirm: () => { },
+    confirmText: undefined as string | undefined,
+    cancelText: undefined as string | null | undefined,
   });
 
   // 로그인 안 된 상태면 로그인 페이지로 이동
@@ -178,9 +183,9 @@ export default function TeacherPage() {
     try {
       const slotsToAdd: Partial<AvailableSlot>[] = [];
 
-      Object.entries(selectedPeriods).forEach(([date, periods]) => {
-        periods.forEach((periodNum) => {
-          const period = DEFAULT_PERIODS.find((p) => p.number === periodNum);
+      Object.entries(selectedPeriods).forEach(([date, selectedPeriodNumbers]) => {
+        selectedPeriodNumbers.forEach((periodNum) => {
+          const period = periods.find((p) => p.number === periodNum);
           if (period) {
             // 이미 존재하는지 확인
             const exists = availableSlots.some(
@@ -221,9 +226,20 @@ export default function TeacherPage() {
       isOpen: true,
       title: t('deleteSlotTitle'),
       message: t('deleteSlotMessage'),
+      confirmText: t('delete'),
+      cancelText: t('cancel'),
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, 'availableSlots', slotId));
+          setSelectedSlotIds(prev => {
+            if (!prev.has(slotId)) {
+              return prev;
+            }
+
+            const next = new Set(prev);
+            next.delete(slotId);
+            return next;
+          });
         } catch (error) {
           console.error('삭제 오류:', error);
           alert(t('deleteFailed'));
@@ -238,6 +254,8 @@ export default function TeacherPage() {
       isOpen: true,
       title: t('cancelReservationTitle'),
       message: t('cancelReservationMessage', { name: reservation.studentName, number: reservation.studentNumber }),
+      confirmText: t('cancelReservation'),
+      cancelText: t('cancel'),
       onConfirm: async () => {
         try {
           const reservationRef = doc(db, 'reservations', reservation.id);
@@ -257,6 +275,77 @@ export default function TeacherPage() {
     });
   };
 
+  const toggleSlotSelection = (slotId: string) => {
+    setSelectedSlotIds(prev => {
+      const next = new Set(prev);
+      if (next.has(slotId)) {
+        next.delete(slotId);
+      } else {
+        next.add(slotId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllSlots = () => {
+    const deletableSlotIds = availableSlots
+      .filter(slot => slot.status === 'available')
+      .map(slot => slot.id);
+
+    if (deletableSlotIds.length === 0) {
+      return;
+    }
+
+    const areAllSelected = deletableSlotIds.every(slotId => selectedSlotIds.has(slotId));
+
+    if (areAllSelected) {
+      setSelectedSlotIds(new Set());
+      return;
+    }
+
+    setSelectedSlotIds(new Set(deletableSlotIds));
+  };
+
+  const handleBulkDeleteSlots = () => {
+    const slotIdsToDelete = availableSlots
+      .filter(slot => slot.status === 'available' && selectedSlotIds.has(slot.id))
+      .map(slot => slot.id);
+
+    if (slotIdsToDelete.length === 0) {
+      alert(t('selectToDelete'));
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: t('deleteSlotTitle'),
+      message: t('confirmBulkDeleteSlots', { count: slotIdsToDelete.length }),
+      confirmText: t('deleteSelected'),
+      cancelText: t('cancel'),
+      onConfirm: async () => {
+        try {
+          for (let index = 0; index < slotIdsToDelete.length; index += BULK_DELETE_BATCH_SIZE) {
+            const batch = writeBatch(db);
+
+            slotIdsToDelete
+              .slice(index, index + BULK_DELETE_BATCH_SIZE)
+              .forEach(slotId => {
+                batch.delete(doc(db, 'availableSlots', slotId));
+              });
+
+            await batch.commit();
+          }
+
+          setSelectedSlotIds(new Set());
+          alert(t('deleted'));
+        } catch (error) {
+          console.error('Bulk delete error:', error);
+          alert(t('bulkDeleteError'));
+        }
+      },
+    });
+  };
+
   // Excel 내보내기
   const handleExportToExcel = () => {
     if (reservations.length === 0) {
@@ -266,7 +355,6 @@ export default function TeacherPage() {
 
     // 데이터 준비
     const data = reservations.map((reservation) => {
-      const period = periods.find((p) => p.number === reservation.period);
       let consultationTypeStr = '';
       if (reservation.consultationType === 'face') consultationTypeStr = t('faceToFace');
       else if (reservation.consultationType === 'phone') consultationTypeStr = t('phoneCounseling');
@@ -312,6 +400,18 @@ export default function TeacherPage() {
       </Layout>
     );
   }
+
+  const sortedAvailableSlots = [...availableSlots]
+    .sort((a, b) => a.date.localeCompare(b.date) || a.period - b.period);
+  const deletableSlots = sortedAvailableSlots.filter(slot => slot.status === 'available');
+  const selectedDeletableSlotIds = new Set(
+    deletableSlots
+      .filter(slot => selectedSlotIds.has(slot.id))
+      .map(slot => slot.id),
+  );
+  const selectedSlotCount = selectedDeletableSlotIds.size;
+  const isAllSlotsSelected =
+    deletableSlots.length > 0 && deletableSlots.every(slot => selectedDeletableSlotIds.has(slot.id));
 
   return (
     <Layout title={t('counselingManage')} description={t('counselingManageDesc')}>
@@ -433,20 +533,66 @@ export default function TeacherPage() {
         {/* 설정된 상담 가능 시간 목록 */}
         {availableSlots.length > 0 && (
           <div className="mb-8">
-            <h3 className="text-lg font-semibold mb-4">{t('setAvailableTimes')}</h3>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-lg font-semibold">{t('setAvailableTimes')}</h3>
+              {deletableSlots.length > 0 && (
+                <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAllSlots}
+                    className="flex items-center gap-2 text-sm text-gray-600 transition-colors hover:text-gray-900"
+                  >
+                    {isAllSlotsSelected ? (
+                      <CheckSquare className="h-4 w-4 text-blue-600" />
+                    ) : (
+                      <Square className="h-4 w-4 text-gray-400" />
+                    )}
+                    {t('selectAll')} ({selectedSlotCount}/{deletableSlots.length})
+                  </button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    className="sm:min-w-[132px]"
+                    disabled={selectedSlotCount === 0}
+                    onClick={handleBulkDeleteSlots}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {t('deleteSelected')}
+                  </Button>
+                </div>
+              )}
+            </div>
             <div className="space-y-2">
-              {availableSlots
-                .sort((a, b) => a.date.localeCompare(b.date) || a.period - b.period)
-                .map((slot) => {
-                  const period = periods.find((p) => p.number === slot.period);
-                  return (
-                    <div
-                      key={slot.id}
-                      className={`flex items-center justify-between p-3 rounded-lg border ${slot.status === 'reserved'
-                        ? 'bg-gray-100 border-gray-300'
-                        : 'bg-white border-gray-200'
-                        }`}
-                    >
+              {sortedAvailableSlots.map((slot) => {
+                const isSelected = selectedDeletableSlotIds.has(slot.id);
+
+                return (
+                  <div
+                    key={slot.id}
+                    className={`flex items-center justify-between rounded-lg border p-3 ${
+                      slot.status === 'reserved'
+                        ? 'border-gray-300 bg-gray-100'
+                        : isSelected
+                          ? 'border-blue-300 bg-blue-50'
+                          : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      {slot.status === 'available' && (
+                        <button
+                          type="button"
+                          onClick={() => toggleSlotSelection(slot.id)}
+                          className="shrink-0 text-gray-400 transition-colors hover:text-blue-600"
+                          aria-label={isSelected ? t('cancel') : t('selectAll')}
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="h-5 w-5 text-blue-600" />
+                          ) : (
+                            <Square className="h-5 w-5" />
+                          )}
+                        </button>
+                      )}
                       <div className="flex-1">
                         <span className="font-medium">{formatDateI18n(slot.date, language)}</span>
                         <span className="mx-2 text-gray-400">|</span>
@@ -454,23 +600,24 @@ export default function TeacherPage() {
                           {t('periodLabel', { number: slot.period })} ({slot.startTime}-{slot.endTime})
                         </span>
                         {slot.status === 'reserved' && (
-                          <span className="ml-2 text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                          <span className="ml-2 rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
                             {t('reserved')}
                           </span>
                         )}
                       </div>
-                      {slot.status === 'available' && (
-                        <Button
-                          onClick={() => handleDeleteSlot(slot.id)}
-                          variant="ghost"
-                          size="sm"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      )}
                     </div>
-                  );
-                })}
+                    {slot.status === 'available' && (
+                      <Button
+                        onClick={() => handleDeleteSlot(slot.id)}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        <Trash2 className="h-4 w-4 text-red-600" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -492,7 +639,6 @@ export default function TeacherPage() {
             </div>
             <div className="space-y-4">
               {reservations.map((reservation) => {
-                const period = periods.find((p) => p.number === reservation.period);
                 return (
                   <div
                     key={reservation.id}
@@ -557,7 +703,8 @@ export default function TeacherPage() {
         title={confirmModal.title}
         message={confirmModal.message}
         isDangerous={true}
-        confirmText={t('delete')}
+        confirmText={confirmModal.confirmText ?? t('delete')}
+        cancelText={confirmModal.cancelText}
       />
     </Layout>
   );

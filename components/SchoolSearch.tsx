@@ -12,7 +12,7 @@ interface SchoolSearchProps {
     placeholder?: string;
 }
 
-export default function SchoolSearch({ value, onSelect, placeholder = '학교명을 입력하세요' }: SchoolSearchProps) {
+export default function SchoolSearch({ value, onSelect, placeholder }: SchoolSearchProps) {
     const [query, setQuery] = useState(value);
     const [results, setResults] = useState<SchoolInfo[]>([]);
     const [showDropdown, setShowDropdown] = useState(false);
@@ -26,13 +26,13 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
         setQuery(value);
     }, [value]);
 
-    // 외부 클릭 시 드롭다운 닫기
     useEffect(() => {
         function handleClickOutside(e: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
                 setShowDropdown(false);
             }
         }
+
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
@@ -76,7 +76,7 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
                 value={query}
                 onChange={handleInputChange}
                 onFocus={() => !isConfirmed && results.length > 0 && setShowDropdown(true)}
-                placeholder={t('schoolSearchPlaceholder')}
+                placeholder={placeholder || t('schoolSearchPlaceholder')}
                 className={`w-full pl-11 pr-12 py-3 bg-white/10 ${isConfirmed ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.15)] text-emerald-100' : 'border-white/20 text-white'} rounded-xl placeholder-white/40 focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all`}
             />
 
@@ -94,7 +94,6 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
                 </div>
             )}
 
-            {/* 검색 결과 드롭다운 */}
             {showDropdown && (
                 <div className="absolute z-50 w-full mt-1 bg-slate-800/95 backdrop-blur-lg border border-white/20 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
                     {results.length > 0 ? (
@@ -114,12 +113,11 @@ export default function SchoolSearch({ value, onSelect, placeholder = '학교명
                         ))
                     ) : (
                         <div className="px-4 py-3 text-white/50 text-sm">
-                            검색 결과가 없습니다.
+                            {t('noSearchResults')}
                         </div>
                     )}
                 </div>
             )}
-
         </div>
     );
 }

@@ -2,27 +2,21 @@
 
 import { useState } from 'react';
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { Search, X, Calendar, Clock, User, MessageSquare } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import Layout from '@/components/Layout';
-import { useAuth } from '@/components/AuthContext';
 import { useLanguage } from '@/lib/i18n';
-import { useRouter } from 'next/navigation';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { Reservation, Period, DEFAULT_PERIODS } from '@/types';
+import { Reservation } from '@/types';
 import { formatDateI18n } from '@/lib/utils';
-import { Search, X, Calendar, Clock, User, MessageSquare, ArrowLeft } from 'lucide-react';
 
 export default function CheckReservationPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [studentNumber, setStudentNumber] = useState('');
   const [studentName, setStudentName] = useState('');
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [periods] = useState<Period[]>(DEFAULT_PERIODS);
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-
-  const router = useRouter();
   const { t, language } = useLanguage();
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -34,7 +28,6 @@ export default function CheckReservationPage() {
     }
 
     setLoading(true);
-    setSearched(true);
 
     try {
       const q = query(
@@ -46,11 +39,10 @@ export default function CheckReservationPage() {
       const querySnapshot = await getDocs(q);
       const foundReservations: Reservation[] = [];
 
-      querySnapshot.forEach((doc) => {
-        foundReservations.push({ id: doc.id, ...doc.data() } as Reservation);
+      querySnapshot.forEach((docSnap) => {
+        foundReservations.push({ id: docSnap.id, ...docSnap.data() } as Reservation);
       });
 
-      // 날짜순 정렬
       foundReservations.sort((a, b) => a.date.localeCompare(b.date) || a.period - b.period);
 
       setReservations(foundReservations);
@@ -67,15 +59,12 @@ export default function CheckReservationPage() {
     if (!window.confirm(t('confirmCancelReservation'))) return;
 
     try {
-      // 예약 삭제
       await deleteDoc(doc(db, 'reservations', reservation.id));
 
-      // 슬롯 상태를 available로 변경
       const slotRef = doc(db, 'availableSlots', reservation.slotId);
       await updateDoc(slotRef, { status: 'available' });
 
-      // 목록에서 제거
-      setReservations(reservations.filter((r) => r.id !== reservation.id));
+      setReservations(prev => prev.filter((item) => item.id !== reservation.id));
 
       alert(t('reservationCanceled'));
     } catch (error) {
@@ -89,7 +78,6 @@ export default function CheckReservationPage() {
     setStudentNumber('');
     setStudentName('');
     setReservations([]);
-    setSearched(false);
   };
 
   if (step === 1) {
@@ -149,7 +137,6 @@ export default function CheckReservationPage() {
     );
   }
 
-  // Step 2: 예약 목록 표시
   return (
     <Layout
       title={t('checkReservationTitle')}
@@ -183,16 +170,16 @@ export default function CheckReservationPage() {
               </div>
 
               {reservations.map((reservation) => {
-                const period = periods.find((p) => p.number === reservation.period);
                 const isPast = new Date(reservation.date) < new Date(new Date().toDateString());
 
                 return (
                   <div
                     key={reservation.id}
-                    className={`p-5 rounded-lg border-2 ${isPast
-                      ? 'bg-gray-50 border-gray-300'
-                      : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
-                      }`}
+                    className={`p-5 rounded-lg border-2 ${
+                      isPast
+                        ? 'bg-gray-50 border-gray-300'
+                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+                    }`}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3">
                       <div className="flex-1">

@@ -2,14 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Shield, Unlock, RefreshCw, AlertCircle, User, Mail, GraduationCap, Users } from 'lucide-react';
+import { Shield, Unlock, RefreshCw, AlertCircle, Mail, GraduationCap, Users } from 'lucide-react';
 import { getLockedAccounts, unlockAccount } from '@/lib/auth-firebase';
-import { useAuth } from '@/components/AuthContext';
 import AuthGuard from '@/components/AuthGuard';
 import { UserProfile } from '@/types/auth';
 
 function AdminContent() {
-    const { profile } = useAuth();
     const [lockedAccounts, setLockedAccounts] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [unlocking, setUnlocking] = useState<string | null>(null);

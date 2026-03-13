@@ -15,6 +15,294 @@ export const AVAILABLE_MODELS = [
 
 export const DEFAULT_MODEL = AVAILABLE_MODELS[0].id;
 
+type NoticeCategoryKey =
+    | 'notice'
+    | 'guide'
+    | 'submission'
+    | 'learning'
+    | 'schoolLife'
+    | 'payment'
+    | 'other';
+
+type NoticeCategory = {
+    key: NoticeCategoryKey;
+    title: string;
+    icon: string;
+    promptDescription: string;
+    aliases: string[];
+    keywords: string[];
+    patterns: RegExp[];
+};
+
+const NOTICE_CATEGORIES: NoticeCategory[] = [
+    {
+        key: 'notice',
+        title: '공지',
+        icon: '📢',
+        promptDescription: '중요 공지, 필수 확인 사항, 학급 운영 공지',
+        aliases: ['공지', '공지사항', '알림', '필독', '중요 공지'],
+        keywords: ['공지', '필독', '협조', '변경', '안내장', '가정통신문'],
+        patterns: [/공지사항/, /필수 확인/, /확인 부탁/, /읽어 주세요/],
+    },
+    {
+        key: 'guide',
+        title: '안내',
+        icon: '📅',
+        promptDescription: '행사, 체험학습, 신청, 일정, 장소, 시간 안내',
+        aliases: ['안내', '일정 안내', '행사 안내', '신청 안내'],
+        keywords: ['일정', '행사', '체험학습', '현장학습', '현장체험학습', '견학', '공연', '대회', '설명회', '공개수업', '참석', '참여', '집합', '출발', '도착', '장소', '예정', '실시', '신청'],
+        patterns: [/예정되어/, /신청해/, /참여해/, /집합/, /장소:/],
+    },
+    {
+        key: 'submission',
+        title: '제출',
+        icon: '📝',
+        promptDescription: '과제, 독서록, 서류, 동의서, 신청서 제출',
+        aliases: ['제출', '제출 안내', '과제 제출', '서류 제출'],
+        keywords: ['제출', '회신', '동의서', '신청서', '독서록', '서류', '사인', '서명', '확인서'],
+        patterns: [/제출해/, /제출해 주세요/, /회신해/, /동의서를/, /신청서를/],
+    },
+    {
+        key: 'learning',
+        title: '학습 안내',
+        icon: '📚',
+        promptDescription: '수업, 숙제, 시험, 평가, 복습, 학습 준비',
+        aliases: ['학습 안내', '학습', '수업 안내'],
+        keywords: ['수업', '숙제', '복습', '예습', '평가', '시험', '단원평가', '받아쓰기', '학습', '교과서', '학습지', '문제집', '국어', '수학', '영어', '과학', '사회'],
+        patterns: [/복습해/, /시험이/, /평가가/, /숙제를/, /학습지를/],
+    },
+    {
+        key: 'schoolLife',
+        title: '학교 생활',
+        icon: '🏫',
+        promptDescription: '준비물, 복장, 급식, 생활 지도, 안전, 규칙',
+        aliases: ['학교 생활', '학교생활', '생활 안내', '복장/생활', '준비물', '급식/간식'],
+        keywords: ['준비물', '챙겨', '가져오', '복장', '체육복', '실내화', '급식', '간식', '생활', '규칙', '안전', '위생', '마스크', '등교', '하교', '우산', '물통', '학용품', '청소'],
+        patterns: [/챙겨 주세요/, /입고 와/, /가져와/, /급식/, /안전/],
+    },
+    {
+        key: 'payment',
+        title: '납부',
+        icon: '💳',
+        promptDescription: '참가비, 준비물비, 현장학습비, 계좌이체 등 실제 금전 납부',
+        aliases: ['납부', '납부 안내', '수납', '납부/제출'],
+        keywords: ['납부', '입금', '수납', '참가비', '비용', '계좌', '이체', '현금', '금액', '원비', '회비', '스쿨뱅킹', 'cms', '자동이체'],
+        patterns: [/\d[\d,]*\s*원/, /납부해/, /입금해/, /계좌로/, /참가비/],
+    },
+    {
+        key: 'other',
+        title: '기타 안내',
+        icon: '📌',
+        promptDescription: '위 분류에 딱 맞지 않는 기타 전달 사항',
+        aliases: ['기타 안내', '기타', '참고'],
+        keywords: [],
+        patterns: [],
+    },
+];
+
+type ParsedNoticeItem = {
+    text: string;
+    sectionHint: NoticeCategoryKey | null;
+};
+
+const CATEGORY_ORDER = NOTICE_CATEGORIES.map(category => category.key);
+const CATEGORY_MAP = Object.fromEntries(
+    NOTICE_CATEGORIES.map(category => [category.key, category] as const)
+) as Record<NoticeCategoryKey, NoticeCategory>;
+const CATEGORY_LIST_TEXT = NOTICE_CATEGORIES
+    .map(category => `${category.icon} ${category.title} — ${category.promptDescription}`)
+    .join('\n');
+
+function stripBulletPrefix(text: string): string {
+    return text.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '').trim();
+}
+
+function getCanonicalHeading(categoryKey: NoticeCategoryKey): string {
+    const category = CATEGORY_MAP[categoryKey];
+    return `## ${category.icon} ${category.title}`;
+}
+
+function normalizeHeadingText(heading: string): string {
+    return heading
+        .replace(/^##+\s*/, '')
+        .replace(/[📢📅📝📚🏫💳📌]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function detectHeadingCategory(heading: string): NoticeCategoryKey | null {
+    const normalized = normalizeHeadingText(heading);
+
+    for (const category of NOTICE_CATEGORIES) {
+        if (normalized === category.title || category.aliases.includes(normalized)) {
+            return category.key;
+        }
+    }
+
+    for (const category of NOTICE_CATEGORIES) {
+        if (normalized.includes(category.title) || category.aliases.some(alias => normalized.includes(alias))) {
+            return category.key;
+        }
+    }
+
+    return null;
+}
+
+function parseNoticeItems(text: string): { header: string | null; items: ParsedNoticeItem[] } {
+    const lines = text.replace(/\r\n/g, '\n').split('\n');
+    const items: ParsedNoticeItem[] = [];
+    let header: string | null = null;
+    let sectionHint: NoticeCategoryKey | null = null;
+    let currentItemIndex = -1;
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+            currentItemIndex = -1;
+            continue;
+        }
+
+        if (trimmed.startsWith('# ')) {
+            if (!header) {
+                header = trimmed;
+            }
+            currentItemIndex = -1;
+            continue;
+        }
+
+        if (trimmed.startsWith('## ')) {
+            sectionHint = detectHeadingCategory(trimmed);
+            currentItemIndex = -1;
+            continue;
+        }
+
+        if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
+            items.push({ text: stripBulletPrefix(trimmed), sectionHint });
+            currentItemIndex = items.length - 1;
+            continue;
+        }
+
+        if (currentItemIndex >= 0) {
+            items[currentItemIndex].text += `\n${trimmed}`;
+            continue;
+        }
+
+        items.push({ text: trimmed, sectionHint });
+        currentItemIndex = items.length - 1;
+    }
+
+    return { header, items };
+}
+
+function hasAnyMatch(text: string, category: NoticeCategory): boolean {
+    const lowered = text.toLowerCase();
+    return category.patterns.some(pattern => pattern.test(text)) || category.keywords.some(keyword => lowered.includes(keyword.toLowerCase()));
+}
+
+function classifyNoticeItem(text: string, sectionHint: NoticeCategoryKey | null): NoticeCategoryKey {
+    const trimmed = text.trim();
+    if (!trimmed) {
+        return 'other';
+    }
+
+    if (hasAnyMatch(trimmed, CATEGORY_MAP.payment)) {
+        return 'payment';
+    }
+
+    if (hasAnyMatch(trimmed, CATEGORY_MAP.submission)) {
+        return 'submission';
+    }
+
+    let bestCategory: NoticeCategoryKey = sectionHint && sectionHint !== 'payment' && sectionHint !== 'submission'
+        ? sectionHint
+        : 'other';
+    let bestScore = bestCategory === 'other' ? 0 : 1;
+
+    for (const categoryKey of CATEGORY_ORDER) {
+        if (categoryKey === 'submission' || categoryKey === 'payment' || categoryKey === 'other') {
+            continue;
+        }
+
+        const category = CATEGORY_MAP[categoryKey];
+        let score = sectionHint === categoryKey ? 1 : 0;
+
+        for (const pattern of category.patterns) {
+            if (pattern.test(trimmed)) {
+                score += 2;
+            }
+        }
+
+        for (const keyword of category.keywords) {
+            if (trimmed.toLowerCase().includes(keyword.toLowerCase())) {
+                score += 1;
+            }
+        }
+
+        if (score > bestScore) {
+            bestCategory = categoryKey;
+            bestScore = score;
+        }
+    }
+
+    if (bestScore === 0 && sectionHint) {
+        return sectionHint;
+    }
+
+    return bestCategory;
+}
+
+function formatBullet(text: string): string {
+    const [firstLine, ...restLines] = stripBulletPrefix(text).split('\n').map(line => line.trim()).filter(Boolean);
+    if (!firstLine) {
+        return '';
+    }
+
+    if (restLines.length === 0) {
+        return `- ${firstLine}`;
+    }
+
+    return `- ${firstLine}\n${restLines.map(line => `  ${line}`).join('\n')}`;
+}
+
+function normalizeNoticeSummary(text: string, defaultHeader: string): string {
+    const { header, items } = parseNoticeItems(text);
+    const groupedItems: Record<NoticeCategoryKey, string[]> = {
+        notice: [],
+        guide: [],
+        submission: [],
+        learning: [],
+        schoolLife: [],
+        payment: [],
+        other: [],
+    };
+
+    for (const item of items) {
+        const categoryKey = classifyNoticeItem(item.text, item.sectionHint);
+        const formatted = formatBullet(item.text);
+        if (formatted) {
+            groupedItems[categoryKey].push(formatted);
+        }
+    }
+
+    if (Object.values(groupedItems).every(group => group.length === 0)) {
+        return text.trim() || defaultHeader;
+    }
+
+    const sections: string[] = [header || defaultHeader];
+
+    for (const categoryKey of CATEGORY_ORDER) {
+        const entries = groupedItems[categoryKey];
+        if (entries.length === 0) {
+            continue;
+        }
+
+        sections.push('', getCanonicalHeading(categoryKey), ...entries);
+    }
+
+    return sections.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // ===== 핵심 API 호출 함수 =====
 
 /**
@@ -106,11 +394,13 @@ async function generateWithInstructions({
     prompt,
     additionalInstructions,
     model,
+    temperature,
 }: {
     systemMessage: string;
     prompt: string;
     additionalInstructions?: string;
     model?: string;
+    temperature?: number;
 }): Promise<string> {
     // 추가 지침 → 시스템 메시지에 추가
     let finalSystemMessage = systemMessage;
@@ -126,7 +416,7 @@ async function generateWithInstructions({
         finalPrompt = prefix + prompt + suffix;
     }
 
-    return callOllamaAPI(finalSystemMessage, finalPrompt, model);
+    return callOllamaAPI(finalSystemMessage, finalPrompt, model, { temperature });
 }
 
 /**
@@ -138,6 +428,7 @@ async function generateWithRetry(params: {
     prompt: string;
     additionalInstructions?: string;
     model?: string;
+    temperature?: number;
 }): Promise<string> {
     let content = await generateWithInstructions(params);
 
@@ -153,7 +444,9 @@ async function generateWithRetry(params: {
 
         const retryPrompt = `다음 텍스트는 문장이 중간에 끊겼습니다. 같은 내용을 완전한 문장으로 끝나도록 다시 작성하세요. 반드시 종결어미와 마침표로 끝내세요. 오직 본문만 출력하세요.\n\n불완전한 텍스트:\n${content}`;
 
-        const retryContent = await callOllamaAPI(params.systemMessage, retryPrompt, params.model);
+        const retryContent = await callOllamaAPI(params.systemMessage, retryPrompt, params.model, {
+            temperature: params.temperature,
+        });
 
         if (retryContent.trim() && endsWithCompleteSentence(retryContent)) {
             content = retryContent;
@@ -195,6 +488,8 @@ export async function summarizeNote(
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     const formattedDate = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일(${days[d.getDay()]})`;
 
+    const defaultHeader = `# ${formattedDate} 알림장 📋`;
+
     const systemMessage = `당신은 초등학교 담임선생님의 알림장 작성을 돕는 전문 비서입니다.
 교사의 메모를 학부모와 학생 모두가 읽기 편한 알림장으로 정리합니다.
 
@@ -209,48 +504,80 @@ export async function summarizeNote(
 - 중요한 날짜, 시간, 장소, 준비물은 반드시 **굵게** 표시합니다
 - 각 카테고리 아래에 불릿(-)을 사용하여 항목을 나열합니다
 - 오직 정리된 알림장 본문만 출력합니다 (메타 정보, 글자수, 분석 내용은 출력하지 않습니다)
-</서식 규칙>`;
+</서식 규칙>
+
+<카테고리 고정 규칙>
+- 카테고리는 반드시 아래 7개만 사용합니다: 공지, 안내, 제출, 학습 안내, 학교 생활, 납부, 기타 안내
+- 섹션 제목은 반드시 "## 아이콘 카테고리명" 형식으로 작성합니다
+- "납부/제출", "준비물", "복장/생활", "급식/간식"처럼 별도 카테고리를 새로 만들지 않습니다
+- "제출"은 과제, 독서록, 서류, 동의서, 신청서, 회신처럼 무언가를 내는 경우입니다
+- "납부"는 실제 금액, 참가비, 계좌이체, 현금, 비용처럼 돈을 내는 경우에만 사용합니다
+- 제출과 납부는 절대로 같은 카테고리로 묶지 않습니다
+- 준비물, 복장, 급식, 생활 지도, 안전, 규칙은 "학교 생활"에 넣습니다
+- 일정, 행사, 체험학습, 신청, 장소, 시간 안내는 "안내"에 넣습니다
+- 수업, 숙제, 평가, 시험, 복습은 "학습 안내"에 넣습니다
+</카테고리 고정 규칙>`;
 
     const prompt = `교사가 작성한 메모를 아래 형식에 맞춰 알림장으로 정리해주세요.
 
 <출력 형식>
-# ${formattedDate} 알림장 📋
+${defaultHeader}
 
-## 카테고리 이모지 카테고리명
+## 아이콘 카테고리명
 - 불릿으로 항목 나열
 - **중요 정보**는 굵게 표시
 </출력 형식>
 
-<카테고리 목록 (해당 내용이 있는 카테고리만 사용)>
-📚 학습 안내 — 수업, 시험, 숙제, 학습 관련
-📦 준비물 — 가져올 것, 챙길 것
-📅 일정 안내 — 행사, 체험학습, 특별 일정
-🍽️ 급식/간식 — 급식, 간식, 식단 관련
-👕 복장/생활 — 복장, 생활 지도, 규칙
-💰 납부/제출 — 돈, 서류 제출 관련
-📢 기타 안내 — 위 카테고리에 해당하지 않는 사항
-</카테고리 목록>
+<사용 가능한 카테고리>
+${CATEGORY_LIST_TEXT}
+</사용 가능한 카테고리>
+
+<카테고리 분류 기준>
+- 공지: 꼭 확인해야 할 학급 공지나 전달 사항
+- 안내: 행사, 신청, 일정, 장소, 시간, 운영 안내
+- 제출: 과제, 독서록, 서류, 동의서, 신청서, 회신 제출
+- 학습 안내: 수업, 숙제, 평가, 시험, 복습, 학습 준비
+- 학교 생활: 준비물, 복장, 급식, 생활 지도, 안전, 규칙
+- 납부: 실제 돈을 내는 경우만 사용
+- 기타 안내: 위 분류에 딱 맞지 않는 내용
+</카테고리 분류 기준>
+
+<중요 제약>
+- "제출" 관련 내용은 반드시 "## 📝 제출" 아래에 정리합니다
+- 금전 표현이 없으면 "## 💳 납부"를 사용하지 않습니다
+- "납부/제출"처럼 두 카테고리를 합친 제목은 금지합니다
+- 원문 항목이 여러 주제를 섞고 있으면 의미 단위로 나눠 각각 가장 맞는 카테고리에 배치합니다
+</중요 제약>
 
 <좋은 예시>
 # 2026년 3월 5일(수) 알림장 📋
 
-## 📚 학습 안내
-- 내일 **수학 단원평가**가 있어요. 3단원까지 꼭 복습해 주세요!
-- 독서록은 **금요일까지** 제출해 주세요.
+## 📢 공지
+- 오늘 배부한 **가정통신문**을 꼭 확인해 주세요.
 
-## 📦 준비물
-- **미술 도구** (크레파스, 스케치북)를 꼭 챙겨 주세요.
+## 📅 안내
+- **3월 10일(월)** 봄 현장체험학습이 예정되어 있어요.
+- 장소는 **서울숲**이며, 오전 **9시까지** 교실로 와주세요.
+
+## 📝 제출
+- 독서록은 **금요일까지** 제출해 주세요.
+- 체험학습 **동의서**도 함께 보내 주세요.
+
+## 📚 학습 안내
+- 내일 **수학 단원평가**가 있어요. 3단원까지 꼭 복습해 주세요.
+
+## 🏫 학교 생활
+- **미술 도구**와 물통을 꼭 챙겨 주세요.
 - 체육복은 **화요일, 목요일**에 입고 와주세요.
 
-## 📅 일정 안내
-- **3월 10일(월)** 봄 현장체험학습이 예정되어 있어요.
-- 장소: **서울숲**, 준비물: 도시락, 돗자리
+## 💳 납부
+- 현장체험학습 **참가비 5,000원**은 **수요일까지** 납부해 주세요.
 </좋은 예시>
 
 <작성 시 주의>
-- 첫 줄은 반드시 "# ${formattedDate} 알림장 📋"으로 시작합니다
+- 첫 줄은 반드시 "${defaultHeader}"로 시작합니다
 - "학부모님께", "안녕하세요" 같은 인사말은 넣지 않습니다
-- 내용이 1~2개뿐이라면 카테고리 1~2개만 사용해도 됩니다
+- 내용이 1~2개뿐이라면 필요한 카테고리만 사용해도 됩니다
 - 원본 메모에 없는 내용을 임의로 추가하지 않습니다
 </작성 시 주의>
 
@@ -262,10 +589,11 @@ ${text}`;
             systemMessage,
             prompt,
             model: model || DEFAULT_MODEL,
+            temperature: 0.35,
         });
 
-        // 후처리: 메타 정보 제거
-        const processed = cleanMetaInfo(rawResult);
+        // 후처리: 메타 정보 제거 + 고정 카테고리 재정렬
+        const processed = normalizeNoticeSummary(cleanMetaInfo(rawResult), defaultHeader);
 
         return processed;
     } catch (error) {

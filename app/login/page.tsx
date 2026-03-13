@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { signInWithEmail, signInWithGoogle, createUserProfile } from '@/lib/auth-firebase';
+import { signInWithEmail, signInWithGoogle } from '@/lib/auth-firebase';
 import { useLanguage } from '@/lib/i18n';
 
 export default function LoginPage() {

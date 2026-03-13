@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
 
 const NOTES_COLLECTION = 'notes';
 

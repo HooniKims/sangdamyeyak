@@ -131,6 +131,31 @@
   - [x] `components/UserProfileModal.tsx`, `lib/auth-firebase.ts`의 `catch (error: any)` 제거 및 안전한 에러 속성 추출 적용
   - [x] `lib/i18n.ts`의 언어 상태를 `useSyncExternalStore` 기반으로 정리해 effect 내 직접 `setState` 제거
   - [x] `npm run lint`, `npx tsc --noEmit`, `npm run build` 검증 완료
+- [x] 학부모 예약 화면 슬롯 표시/선택 로직 수정
+  - [x] `/parent`, `/booking/[teacherId]`에서 미래 슬롯 전체(available/reserved) 노출 및 reserved 슬롯 비활성 처리
+  - [x] 학부모 공개 화면에서 reserved 상태만 표시하고 예약자 개인정보 비노출 유지
+  - [x] 예약 시 슬롯 상태를 transaction으로 재검증하여 동시 예약 충돌 방지
+  - [x] 예약 관련 i18n 문구(한/영) 보강 및 빌드 검증 완료
+- [x] 교사용 상담 슬롯 일괄 삭제 기능 추가
+  - [x] `/teacher` 상담 슬롯 목록에 다중 선택 UI 및 전체 선택/선택 삭제 액션 추가
+  - [x] reserved 슬롯은 선택 대상에서 제외하고 available 슬롯만 일괄 삭제 가능하도록 제한
+  - [x] 대량 삭제 시 Firestore batch commit을 분할 실행해 많은 슬롯도 처리 가능하게 구성
+  - [x] 관련 확인 문구 i18n 반영 및 lint/typecheck/build 재검증 완료
+- [x] 저장소 전반 lint warning 정리
+  - [x] 미사용 import/state/function 제거 및 공개 API/컴포넌트 시그니처 정리
+  - [x] `app/check-reservation/page.tsx`, `app/api/auth/check-lock/route.ts`, `components/SchoolSearch.tsx` 등 경고 발생 파일 정리
+  - [x] `npm run lint`, `npx tsc --noEmit`, `npm run build` 재검증 완료
+- [x] baseline-browser-mapping 빌드 안내 메시지 점검
+  - [x] `package-lock.json`의 transitive `baseline-browser-mapping`을 `2.8.28`에서 `2.10.7`로 갱신
+  - [x] `npm run build` 재검증 결과, 남은 메시지는 저장소 버전 고정 문제가 아니라 업스트림 데이터 갱신 주기 이슈임을 확인
+- [x] 알림장 AI 변환 로직 점검
+  - [x] `lib/notice-ai.ts` 기준으로 카테고리 분류가 후처리 규칙이 아니라 LLM 프롬프트 지시만으로 결정됨을 확인
+  - [x] `💰 납부/제출`처럼 서로 성격이 다른 항목이 한 카테고리에 묶여 있어 일반적인 제출 안내도 돈주머니 이모지로 쏠릴 수 있음을 확인
+- [x] 알림장 AI 카테고리 체계 개선
+  - [x] `lib/notice-ai.ts`의 카테고리를 `공지, 안내, 제출, 학습 안내, 학교 생활, 납부, 기타 안내` 7개 고정 체계로 재정의
+  - [x] `제출`과 `납부`를 프롬프트와 후처리 양쪽에서 분리해 `납부/제출` 혼합 섹션이 생기지 않도록 보정
+  - [x] AI 출력 마크다운을 후처리로 재분류해 허용된 카테고리/아이콘만 남기도록 정규화
+  - [x] `npm run lint`, `npx tsc --noEmit`, `npm run build` 검증 완료
 - [x] 최신 변경 사항 깃허브 업로드 (`main` 브랜치)
 ## 예정된 작업
 - [x] 교사와 학부모 매칭 누락 문제 해결 (가입 순서 무관 매칭 또는 로그인 시 매칭 갱신 등)

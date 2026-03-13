@@ -231,7 +231,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 }
 
 /** 이메일로 사용자 프로필 조회 */
-async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
+export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
     const q = query(collection(db, 'users'), where('email', '==', email));
     const snapshot = await getDocs(q);
     if (snapshot.empty) return null;

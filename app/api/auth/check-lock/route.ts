@@ -1,31 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Firestore REST API를 사용하여 서버 사이드에서 계정 잠금 상태를 검증합니다.
-// Firebase Admin SDK 없이 동작하므로 별도 서비스 계정 키가 불필요합니다.
-
 const FIRESTORE_PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 const MAX_FAILED_ATTEMPTS = 10;
 
-async function firestoreRest(method: string, path: string, body?: Record<string, unknown>) {
-    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/${path}`;
-
-    const options: RequestInit = {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-    };
-
-    if (body) {
-        options.body = JSON.stringify(body);
-    }
-
-    const res = await fetch(url);
-    if (!res.ok) {
-        return null;
-    }
-    return res.json();
-}
-
-// Firestore REST API로 사용자 조회 (이메일 기반)
 async function findUserByEmail(email: string) {
     const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents:runQuery`;
 
@@ -64,7 +41,6 @@ async function findUserByEmail(email: string) {
     };
 }
 
-// Firestore REST API로 문서 업데이트
 async function updateUserFields(docPath: string, fields: Record<string, unknown>) {
     const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/${docPath}`;
 
@@ -89,14 +65,6 @@ async function updateUserFields(docPath: string, fields: Record<string, unknown>
     });
 }
 
-/**
- * POST /api/auth/check-lock
- * Body: { email: string, action: 'check' | 'increment' | 'reset' }
- *
- * - check: 계정 잠금 상태 확인
- * - increment: 로그인 실패 횟수 증가 (10회 시 잠금)
- * - reset: 로그인 성공 시 실패 횟수 초기화
- */
 export async function POST(request: NextRequest) {
     try {
         const { email, action } = await request.json();
@@ -111,7 +79,6 @@ export async function POST(request: NextRequest) {
         const user = await findUserByEmail(email);
 
         if (!user) {
-            // 사용자를 찾을 수 없어도 보안상 동일 응답
             return NextResponse.json({ isLocked: false, failedAttempts: 0 });
         }
 

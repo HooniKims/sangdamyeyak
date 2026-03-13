@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import {
   collection,
   doc,
-  getDocs,
   onSnapshot,
   query,
   runTransaction,
@@ -21,6 +20,12 @@ import { formatDate, formatDateI18n } from '@/lib/utils';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/components/AuthContext';
 import { useLanguage } from '@/lib/i18n';
+import { updateParentStudentName } from '@/lib/auth-firebase';
+import {
+  formatReservationStudentLabel,
+  formatStudentLookupLabel,
+  searchReservationsByStudentInfo,
+} from '@/lib/reservation-firebase';
 
 type Tab = 'book' | 'check';
 const SLOT_ALREADY_RESERVED_ERROR = 'slot-already-reserved';
@@ -86,10 +91,11 @@ export default function ParentPage() {
 type Step = 1 | 2 | 3;
 
 function BookingTab() {
-  const { profile } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
   const { t, language } = useLanguage();
   const [step, setStep] = useState<Step>(1);
-  const [studentNumber, setStudentNumber] = useState('');
+  const [grade, setGrade] = useState(1);
+  const [classNum, setClassNum] = useState(1);
   const [studentName, setStudentName] = useState('');
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
@@ -106,13 +112,23 @@ function BookingTab() {
     onConfirm: () => { },
     cancelText: null as string | null,
   });
+  const parentStudentName =
+    profile?.role === 'parent'
+      ? ((profile as import('@/types/auth').ParentProfile).studentName || '').trim()
+      : '';
+  const shouldLockStudentName = profile?.role === 'parent' && Boolean(parentStudentName);
 
   // 로그인한 학부모 프로필에서 매칭된 교사 ID(matchedTeacherId)를 가져옵니다.
   useEffect(() => {
     if (profile?.role === 'parent') {
       const parentProfile = profile as import('@/types/auth').ParentProfile;
-      if (parentProfile.matchedTeacherId) {
-        setTeacherId(parentProfile.matchedTeacherId);
+      const nextStudentName = (parentProfile.studentName || '').trim();
+      setTeacherId(parentProfile.matchedTeacherId || '');
+      setGrade(parentProfile.grade);
+      setClassNum(parentProfile.classNum);
+      setStudentName(nextStudentName);
+      if (nextStudentName) {
+        setStep(prev => (prev === 1 ? 2 : prev));
       }
     }
   }, [profile]);
@@ -160,12 +176,26 @@ function BookingTab() {
     }
   }, [availableSlots, selectedSlot, step]);
 
-  const handleStudentInfoSubmit = (e: React.FormEvent) => {
+  const handleStudentInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentNumber.trim() || !studentName.trim()) {
-      alert(t('enterBothFields'));
+    const trimmedStudentName = studentName.trim();
+
+    if (!trimmedStudentName) {
+      alert(t('enterStudentInfo'));
       return;
     }
+
+    setStudentName(trimmedStudentName);
+
+    if (profile?.role === 'parent' && user && !parentStudentName) {
+      try {
+        await updateParentStudentName(user.uid, trimmedStudentName);
+        await refreshProfile();
+      } catch (error) {
+        console.error('Failed to persist parent student name:', error);
+      }
+    }
+
     setStep(2);
   };
 
@@ -216,8 +246,10 @@ function BookingTab() {
         transaction.set(doc(reservationRef), {
           teacherId: selectedSlot.teacherId,
           slotId: selectedSlot.id,
-          studentNumber: studentNumber.trim(),
+          studentNumber: '',
           studentName: studentName.trim(),
+          grade,
+          classNum,
           date: selectedSlot.date,
           period: selectedSlot.period,
           startTime: selectedSlot.startTime,
@@ -236,9 +268,12 @@ function BookingTab() {
         message: t('bookingCompletedMsg'),
         cancelText: null,
         onConfirm: () => {
-          setStep(1);
-          setStudentNumber('');
-          setStudentName('');
+          setStep(profile?.role === 'parent' ? 2 : 1);
+          if (profile?.role !== 'parent') {
+            setGrade(1);
+            setClassNum(1);
+            setStudentName('');
+          }
           setSelectedSlot(null);
           setTopic(COUNSELING_TOPICS[0]);
           setContent('');
@@ -271,19 +306,44 @@ function BookingTab() {
     return (
       <div className="bg-white rounded-lg shadow-md p-6">
         <form onSubmit={handleStudentInfoSubmit} className="space-y-6">
-          <div>
-            <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <User className="w-4 h-4 mr-2" />
-              {t('studentNumber')}
-            </label>
-            <input
-              type="text"
-              value={studentNumber}
-              onChange={e => setStudentNumber(e.target.value)}
-              placeholder={t('studentNumberPlaceholder')}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent [transform:translateZ(0)]"
-              required
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <User className="w-4 h-4 mr-2" />
+                {t('grade')}
+              </label>
+              <select
+                value={grade}
+                onChange={e => setGrade(Number(e.target.value))}
+                disabled={profile?.role === 'parent'}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
+              >
+                {[1, 2, 3, 4, 5, 6].map((gradeOption) => (
+                  <option key={gradeOption} value={gradeOption}>
+                    {gradeOption}{t('gradeUnit')}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                <User className="w-4 h-4 mr-2" />
+                {t('classNum')}
+              </label>
+              <select
+                value={classNum}
+                onChange={e => setClassNum(Number(e.target.value))}
+                disabled={profile?.role === 'parent'}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
+              >
+                {Array.from({ length: 15 }, (_, index) => index + 1).map((classOption) => (
+                  <option key={classOption} value={classOption}>
+                    {classOption}{t('classUnit')}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -296,7 +356,8 @@ function BookingTab() {
               value={studentName}
               onChange={e => setStudentName(e.target.value)}
               placeholder={t('studentNameFieldPlaceholder')}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent [transform:translateZ(0)]"
+              readOnly={shouldLockStudentName}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent read-only:bg-gray-100 read-only:text-gray-600 [transform:translateZ(0)]"
               required
             />
           </div>
@@ -314,12 +375,14 @@ function BookingTab() {
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">{studentNumber}</span> - {studentName}
+            <div className="text-sm text-gray-600 font-medium">
+              {formatStudentLookupLabel({ grade, classNum, studentName }, language)}
             </div>
-            <Button onClick={() => setStep(1)} variant="ghost" size="sm">
-              {t('editInfo')}
-            </Button>
+            {profile?.role !== 'parent' && (
+              <Button onClick={() => setStep(1)} variant="ghost" size="sm">
+                {t('editInfo')}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -540,8 +603,10 @@ function BookingTab() {
 }
 
 function CheckTab() {
+  const { profile } = useAuth();
   const { t, language } = useLanguage();
-  const [studentNumber, setStudentNumber] = useState('');
+  const [grade, setGrade] = useState(1);
+  const [classNum, setClassNum] = useState(1);
   const [studentName, setStudentName] = useState('');
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -553,31 +618,46 @@ function CheckTab() {
     onConfirm: () => { },
     cancelText: null as string | null,
   });
+  const parentStudentName =
+    profile?.role === 'parent'
+      ? ((profile as import('@/types/auth').ParentProfile).studentName || '').trim()
+      : '';
+  const shouldLockStudentName = profile?.role === 'parent' && Boolean(parentStudentName);
+
+  useEffect(() => {
+    if (profile?.role === 'parent') {
+      const parentProfile = profile as import('@/types/auth').ParentProfile;
+      setGrade(parentProfile.grade);
+      setClassNum(parentProfile.classNum);
+      setStudentName((parentProfile.studentName || '').trim());
+    }
+  }, [profile]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentNumber.trim() || !studentName.trim()) {
-      alert(t('enterBothFields'));
+    if (!studentName.trim()) {
+      alert(t('enterStudentInfo'));
       return;
     }
 
     try {
       setLoading(true);
-      const q = query(
-        collection(db, 'reservations'),
-        where('studentNumber', '==', studentNumber.trim()),
-        where('studentName', '==', studentName.trim()),
-      );
-      const snapshot = await getDocs(q);
+      const matchedTeacherId =
+        profile?.role === 'parent'
+          ? (profile as import('@/types/auth').ParentProfile).matchedTeacherId
+          : null;
+      const schoolCode =
+        profile?.role === 'parent'
+          ? (profile as import('@/types/auth').ParentProfile).schoolCode
+          : null;
 
-      const result: Reservation[] = [];
-      snapshot.forEach(docSnap => {
-        result.push({ id: docSnap.id, ...(docSnap.data() as Omit<Reservation, 'id'>) });
+      const result = await searchReservationsByStudentInfo({
+        studentName,
+        grade,
+        classNum,
+        schoolCode,
+        teacherId: matchedTeacherId,
       });
-
-      result.sort(
-        (a, b) => a.date.localeCompare(b.date) || a.period - b.period,
-      );
 
       setReservations(result);
       setSearched(true);
@@ -593,7 +673,7 @@ function CheckTab() {
     setConfirmModal({
       isOpen: true,
       title: t('cancelReservationTitle'),
-      message: `${reservation.studentName}(${reservation.studentNumber})`,
+      message: formatReservationStudentLabel(reservation, language),
       cancelText: '취소',
       onConfirm: async () => {
         try {
@@ -628,18 +708,42 @@ function CheckTab() {
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="w-4 h-4 mr-2" />
-              {t('studentNumber')}
+              {t('grade')}
             </label>
-            <input
-              type="text"
-              value={studentNumber}
-              onChange={e => setStudentNumber(e.target.value)}
-              placeholder={t('studentNumberPlaceholder')}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent [transform:translateZ(0)]"
-            />
+            <select
+              value={grade}
+              onChange={e => setGrade(Number(e.target.value))}
+              disabled={profile?.role === 'parent'}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
+            >
+              {[1, 2, 3, 4, 5, 6].map((gradeOption) => (
+                <option key={gradeOption} value={gradeOption}>
+                  {gradeOption}{t('gradeUnit')}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
+            <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <User className="w-4 h-4 mr-2" />
+              {t('classNum')}
+            </label>
+            <select
+              value={classNum}
+              onChange={e => setClassNum(Number(e.target.value))}
+              disabled={profile?.role === 'parent'}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
+            >
+              {Array.from({ length: 15 }, (_, index) => index + 1).map((classOption) => (
+                <option key={classOption} value={classOption}>
+                  {classOption}{t('classUnit')}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="sm:col-span-2">
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="w-4 h-4 mr-2" />
               {t('studentNameField')}
@@ -649,7 +753,8 @@ function CheckTab() {
               value={studentName}
               onChange={e => setStudentName(e.target.value)}
               placeholder={t('studentNameFieldPlaceholder')}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent [transform:translateZ(0)]"
+              readOnly={shouldLockStudentName}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent read-only:bg-gray-100 read-only:text-gray-600 [transform:translateZ(0)]"
             />
           </div>
         </div>
@@ -664,6 +769,12 @@ function CheckTab() {
           <CheckCircle2 className="w-5 h-5 text-blue-600" />
           {t('reservationHistory')}
         </h3>
+
+        {searched && (
+          <div className="mb-4 text-sm text-gray-600 font-medium">
+            {formatStudentLookupLabel({ grade, classNum, studentName }, language)}
+          </div>
+        )}
 
         {loading && (
           <div className="py-8 flex justify-center">

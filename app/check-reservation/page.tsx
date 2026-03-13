@@ -1,28 +1,70 @@
 'use client';
 
-import { useState } from 'react';
-import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { doc, runTransaction } from 'firebase/firestore';
 import { Search, X, Calendar, Clock, User, MessageSquare } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import Layout from '@/components/Layout';
 import { useLanguage } from '@/lib/i18n';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import SchoolSearch from '@/components/SchoolSearch';
+import { useAuth } from '@/components/AuthContext';
 import { Reservation } from '@/types';
+import { SchoolInfo } from '@/types/auth';
 import { formatDateI18n } from '@/lib/utils';
+import {
+  formatStudentLookupLabel,
+  searchReservationsByStudentInfo,
+} from '@/lib/reservation-firebase';
 
 export default function CheckReservationPage() {
   const [step, setStep] = useState<1 | 2>(1);
-  const [studentNumber, setStudentNumber] = useState('');
+  const [schoolName, setSchoolName] = useState('');
+  const [schoolCode, setSchoolCode] = useState('');
+  const [grade, setGrade] = useState(1);
+  const [classNum, setClassNum] = useState(1);
   const [studentName, setStudentName] = useState('');
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
   const { t, language } = useLanguage();
+  const { profile } = useAuth();
+  const parentStudentName =
+    profile?.role === 'parent'
+      ? ((profile as import('@/types/auth').ParentProfile).studentName || '').trim()
+      : '';
+  const shouldLockStudentName = profile?.role === 'parent' && Boolean(parentStudentName);
+
+  useEffect(() => {
+    if (profile?.role !== 'parent') return;
+
+    const parentProfile = profile as import('@/types/auth').ParentProfile;
+    setSchoolName(parentProfile.schoolName);
+    setSchoolCode(parentProfile.schoolCode);
+    setGrade(parentProfile.grade);
+    setClassNum(parentProfile.classNum);
+    setStudentName((parentProfile.studentName || '').trim());
+  }, [profile]);
+
+  const handleSchoolSelect = (school: SchoolInfo) => {
+    setSchoolName(school.schoolName);
+    setSchoolCode(school.schoolCode);
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!studentNumber.trim() || !studentName.trim()) {
+    if (!schoolName.trim()) {
+      alert(t('selectSchool'));
+      return;
+    }
+
+    if (!schoolCode) {
+      alert(t('selectSchoolFromSearch'));
+      return;
+    }
+
+    if (!studentName.trim()) {
       alert(t('enterStudentInfo'));
       return;
     }
@@ -30,20 +72,12 @@ export default function CheckReservationPage() {
     setLoading(true);
 
     try {
-      const q = query(
-        collection(db, 'reservations'),
-        where('studentNumber', '==', studentNumber.trim()),
-        where('studentName', '==', studentName.trim())
-      );
-
-      const querySnapshot = await getDocs(q);
-      const foundReservations: Reservation[] = [];
-
-      querySnapshot.forEach((docSnap) => {
-        foundReservations.push({ id: docSnap.id, ...docSnap.data() } as Reservation);
+      const foundReservations = await searchReservationsByStudentInfo({
+        studentName,
+        grade,
+        classNum,
+        schoolCode,
       });
-
-      foundReservations.sort((a, b) => a.date.localeCompare(b.date) || a.period - b.period);
 
       setReservations(foundReservations);
       setStep(2);
@@ -59,10 +93,13 @@ export default function CheckReservationPage() {
     if (!window.confirm(t('confirmCancelReservation'))) return;
 
     try {
-      await deleteDoc(doc(db, 'reservations', reservation.id));
-
+      const reservationRef = doc(db, 'reservations', reservation.id);
       const slotRef = doc(db, 'availableSlots', reservation.slotId);
-      await updateDoc(slotRef, { status: 'available' });
+
+      await runTransaction(db, async (transaction) => {
+        transaction.delete(reservationRef);
+        transaction.update(slotRef, { status: 'available' });
+      });
 
       setReservations(prev => prev.filter((item) => item.id !== reservation.id));
 
@@ -75,8 +112,20 @@ export default function CheckReservationPage() {
 
   const handleReset = () => {
     setStep(1);
-    setStudentNumber('');
-    setStudentName('');
+    if (profile?.role === 'parent') {
+      const parentProfile = profile as import('@/types/auth').ParentProfile;
+      setSchoolName(parentProfile.schoolName);
+      setSchoolCode(parentProfile.schoolCode);
+      setGrade(parentProfile.grade);
+      setClassNum(parentProfile.classNum);
+      setStudentName(parentProfile.studentName || '');
+    } else {
+      setSchoolName('');
+      setSchoolCode('');
+      setGrade(1);
+      setClassNum(1);
+      setStudentName('');
+    }
     setReservations([]);
   };
 
@@ -91,29 +140,74 @@ export default function CheckReservationPage() {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <User className="w-4 h-4 mr-2" />
-                {t('studentNumber')}
+                {t('school')}
               </label>
-              <input
-                type="text"
-                value={studentNumber}
-                onChange={(e) => setStudentNumber(e.target.value)}
-                placeholder={t('studentNumberPlaceholder')}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
+              {profile?.role === 'parent' ? (
+                <input
+                  type="text"
+                  value={schoolName}
+                  readOnly
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-700"
+                />
+              ) : (
+                <SchoolSearch
+                  value={schoolName}
+                  onSelect={handleSchoolSelect}
+                  variant="solid"
+                />
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                  <User className="w-4 h-4 mr-2" />
+                  {t('grade')}
+                </label>
+                <select
+                  value={grade}
+                  onChange={(e) => setGrade(Number(e.target.value))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {[1, 2, 3, 4, 5, 6].map((gradeOption) => (
+                    <option key={gradeOption} value={gradeOption}>
+                      {gradeOption}{t('gradeUnit')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                  <User className="w-4 h-4 mr-2" />
+                  {t('classNum')}
+                </label>
+                <select
+                  value={classNum}
+                  onChange={(e) => setClassNum(Number(e.target.value))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {Array.from({ length: 15 }, (_, index) => index + 1).map((classOption) => (
+                    <option key={classOption} value={classOption}>
+                      {classOption}{t('classUnit')}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <User className="w-4 h-4 mr-2" />
-                {t('studentName')}
+                {t('studentNameField')}
               </label>
               <input
                 type="text"
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
                 placeholder={t('studentNameFieldPlaceholder')}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                readOnly={shouldLockStudentName}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent read-only:bg-gray-100 read-only:text-gray-600"
                 required
               />
             </div>
@@ -145,8 +239,13 @@ export default function CheckReservationPage() {
       <div className="p-6 sm:p-8">
         <div className="max-w-3xl mx-auto">
           <div className="mb-6 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">{studentNumber}</span> - {studentName}
+            <div>
+              <div className="text-sm text-gray-600">
+                {t('schoolInfo', { school: schoolName, grade, class: classNum })}
+              </div>
+              <div className="text-sm text-gray-600 font-medium">
+                {formatStudentLookupLabel({ grade, classNum, studentName }, language)}
+              </div>
             </div>
             <Button onClick={handleReset} variant="ghost" size="sm">
               {t('searchAgain')}

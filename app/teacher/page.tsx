@@ -15,6 +15,7 @@ import { Clock, Trash2, Settings, Calendar as CalendarIcon, Download, X, Home, C
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/components/AuthContext';
 import { useLanguage } from '@/lib/i18n';
+import { formatReservationStudentLabel } from '@/lib/reservation-firebase';
 
 const BULK_DELETE_BATCH_SIZE = 400;
 
@@ -250,10 +251,12 @@ export default function TeacherPage() {
 
   // 예약 취소 (교사)
   const handleCancelReservation = (reservation: Reservation) => {
+    const studentLabel = formatReservationStudentLabel(reservation, language);
+
     setConfirmModal({
       isOpen: true,
       title: t('cancelReservationTitle'),
-      message: t('cancelReservationMessage', { name: reservation.studentName, number: reservation.studentNumber }),
+      message: t('cancelReservationMessage', { student: studentLabel }),
       confirmText: t('cancelReservation'),
       cancelText: t('cancel'),
       onConfirm: async () => {
@@ -361,7 +364,9 @@ export default function TeacherPage() {
       else if (reservation.consultationType === 'etc') consultationTypeStr = `${t('other')} (${reservation.consultationTypeEtc || ''})`;
 
       return {
-        [t('studentNumber')]: reservation.studentNumber,
+        [t('grade')]: reservation.grade ?? '',
+        [t('classNum')]: reservation.classNum ?? '',
+        [t('studentNumber')]: reservation.studentNumber ?? '',
         [t('studentNameField')]: reservation.studentName,
         [t('date') || '날짜']: formatDateI18n(reservation.date, language),
         [t('periodLabel', { number: '' }).trim() || '교시']: t('periodLabel', { number: reservation.period }),
@@ -647,7 +652,7 @@ export default function TeacherPage() {
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2">
                       <div className="flex-1">
                         <div className="font-semibold text-gray-900 mb-1">
-                          {reservation.studentNumber} - {reservation.studentName}
+                          {formatReservationStudentLabel(reservation, language)}
                         </div>
                         <div className="text-sm text-gray-600">
                           {formatDateI18n(reservation.date, language)} {t('periodLabel', { number: reservation.period })}

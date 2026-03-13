@@ -26,8 +26,10 @@ export interface Reservation {
   id: string;
   teacherId: string;
   slotId: string;
-  studentNumber: string;
+  studentNumber?: string;
   studentName: string;
+  grade?: number;
+  classNum?: number;
   date: string;
   period: number;
   startTime: string;

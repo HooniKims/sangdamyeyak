@@ -12,6 +12,9 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import { AvailableSlot, COUNSELING_TOPICS, CounselingTopic } from '@/types';
 import { formatDate, formatDateI18n } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n';
+import { useAuth } from '@/components/AuthContext';
+import { updateParentStudentName } from '@/lib/auth-firebase';
+import { formatStudentLookupLabel } from '@/lib/reservation-firebase';
 
 const SLOT_ALREADY_RESERVED_ERROR = 'slot-already-reserved';
 
@@ -19,9 +22,11 @@ export default function BookingPage() {
   const params = useParams<{ teacherId: string }>();
   const teacherId = Array.isArray(params.teacherId) ? params.teacherId[0] : params.teacherId;
   const { t, language } = useLanguage();
+  const { profile, user, refreshProfile } = useAuth();
 
   const [step, setStep] = useState<1 | 2>(1);
-  const [studentNumber, setStudentNumber] = useState('');
+  const [grade, setGrade] = useState(1);
+  const [classNum, setClassNum] = useState(1);
   const [studentName, setStudentName] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [topic, setTopic] = useState<CounselingTopic>(COUNSELING_TOPICS[0]);
@@ -31,6 +36,24 @@ export default function BookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
+  const parentStudentName =
+    profile?.role === 'parent'
+      ? ((profile as import('@/types/auth').ParentProfile).studentName || '').trim()
+      : '';
+  const shouldLockStudentName = profile?.role === 'parent' && Boolean(parentStudentName);
+
+  useEffect(() => {
+    if (profile?.role === 'parent') {
+      const parentProfile = profile as import('@/types/auth').ParentProfile;
+      const nextStudentName = (parentProfile.studentName || '').trim();
+      setGrade(parentProfile.grade);
+      setClassNum(parentProfile.classNum);
+      setStudentName(nextStudentName);
+      if (nextStudentName) {
+        setStep(prev => (prev === 1 ? 2 : prev));
+      }
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (!teacherId) return;
@@ -76,12 +99,24 @@ export default function BookingPage() {
     }
   }, [availableSlots, selectedSlot, t]);
 
-  const handleStep1Submit = (e: FormEvent<HTMLFormElement>) => {
+  const handleStep1Submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const trimmedStudentName = studentName.trim();
 
-    if (!studentNumber.trim() || !studentName.trim()) {
-      alert(t('enterBothFields'));
+    if (!trimmedStudentName) {
+      alert(t('enterStudentInfo'));
       return;
+    }
+
+    setStudentName(trimmedStudentName);
+
+    if (profile?.role === 'parent' && user && !parentStudentName) {
+      try {
+        await updateParentStudentName(user.uid, trimmedStudentName);
+        await refreshProfile();
+      } catch (error) {
+        console.error('Failed to persist parent student name:', error);
+      }
     }
 
     setStep(2);
@@ -122,8 +157,10 @@ export default function BookingPage() {
         transaction.set(reservationRef, {
           teacherId,
           slotId: selectedSlot.id,
-          studentNumber: studentNumber.trim(),
+          studentNumber: '',
           studentName: studentName.trim(),
+          grade,
+          classNum,
           date: selectedSlot.date,
           period: selectedSlot.period,
           startTime: selectedSlot.startTime,
@@ -173,10 +210,8 @@ export default function BookingPage() {
               <h3 className="mb-3 font-semibold text-gray-900">{t('reservationHistory')}</h3>
               <div className="space-y-2 text-sm text-gray-700">
                 <div>
-                  <span className="font-medium">{t('studentNumber')}:</span> {studentNumber}
-                </div>
-                <div>
-                  <span className="font-medium">{t('studentNameField')}:</span> {studentName}
+                  <span className="font-medium">{t('studentNameField')}:</span>{' '}
+                  {formatStudentLookupLabel({ grade, classNum, studentName }, language)}
                 </div>
                 <div>
                   <span className="font-medium">{t('date')}:</span> {formatDateI18n(selectedSlot.date, language)}
@@ -207,19 +242,44 @@ export default function BookingPage() {
       <Layout title={t('bookReservation')} description={t('enterStudentInfo')}>
         <form onSubmit={handleStep1Submit} className="p-6 sm:p-8">
           <div className="mx-auto max-w-md space-y-6">
-            <div>
-              <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
-                <User className="mr-2 h-4 w-4" />
-                {t('studentNumber')}
-              </label>
-              <input
-                type="text"
-                value={studentNumber}
-                onChange={e => setStudentNumber(e.target.value)}
-                placeholder={t('studentNumberPlaceholder')}
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                required
-              />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
+                  <User className="mr-2 h-4 w-4" />
+                  {t('grade')}
+                </label>
+                <select
+                  value={grade}
+                  onChange={e => setGrade(Number(e.target.value))}
+                  disabled={profile?.role === 'parent'}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                >
+                  {[1, 2, 3, 4, 5, 6].map((gradeOption) => (
+                    <option key={gradeOption} value={gradeOption}>
+                      {gradeOption}{t('gradeUnit')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
+                  <User className="mr-2 h-4 w-4" />
+                  {t('classNum')}
+                </label>
+                <select
+                  value={classNum}
+                  onChange={e => setClassNum(Number(e.target.value))}
+                  disabled={profile?.role === 'parent'}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                >
+                  {Array.from({ length: 15 }, (_, index) => index + 1).map((classOption) => (
+                    <option key={classOption} value={classOption}>
+                      {classOption}{t('classUnit')}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
@@ -232,7 +292,8 @@ export default function BookingPage() {
                 value={studentName}
                 onChange={e => setStudentName(e.target.value)}
                 placeholder={t('studentNameFieldPlaceholder')}
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                readOnly={shouldLockStudentName}
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500 read-only:bg-gray-100 read-only:text-gray-600"
                 required
               />
             </div>
@@ -251,12 +312,14 @@ export default function BookingPage() {
       <form onSubmit={handleSubmit} className="p-6 sm:p-8">
         <div className="mx-auto max-w-3xl space-y-8">
           <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-            <div>
-              <span className="font-medium">{studentNumber}</span> - {studentName}
+            <div className="font-medium">
+              {formatStudentLookupLabel({ grade, classNum, studentName }, language)}
             </div>
-            <Button type="button" onClick={() => setStep(1)} variant="ghost" size="sm">
-              {t('editInfo')}
-            </Button>
+            {profile?.role !== 'parent' && (
+              <Button type="button" onClick={() => setStep(1)} variant="ghost" size="sm">
+                {t('editInfo')}
+              </Button>
+            )}
           </div>
 
           <div>

@@ -69,7 +69,7 @@ export async function createUserProfile(
 
     // 학부모인 경우 학생이름 + 교사 매칭
     if (data.role === 'parent') {
-        profileData.studentName = data.studentName || '';
+        profileData.studentName = data.studentName?.trim() || '';
         profileData.matchedTeacherId = await matchTeacher(
             data.schoolCode,
             data.grade,
@@ -243,6 +243,13 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile 
 // ============================================================
 
 const MAX_FAILED_ATTEMPTS = 10;
+
+export async function updateParentStudentName(uid: string, studentName: string): Promise<void> {
+    await updateDoc(doc(db, 'users', uid), {
+        studentName: studentName.trim(),
+        updatedAt: serverTimestamp(),
+    });
+}
 
 /** 로그인 실패 횟수 증가 (10회 시 잠금) */
 export async function incrementFailedAttempts(uid: string): Promise<boolean> {

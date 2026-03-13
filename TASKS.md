@@ -156,6 +156,14 @@
   - [x] `제출`과 `납부`를 프롬프트와 후처리 양쪽에서 분리해 `납부/제출` 혼합 섹션이 생기지 않도록 보정
   - [x] AI 출력 마크다운을 후처리로 재분류해 허용된 카테고리/아이콘만 남기도록 정규화
   - [x] `npm run lint`, `npx tsc --noEmit`, `npm run build` 검증 완료
+- [x] 학부모 상담 예약 빈 상태 문구 수정
+  - [x] `/parent`, `/booking/[teacherId]`에서 사용하는 `noTimeSlots` 한국어 문구를 `상담 가능한 시간이 없습니다.`로 조정
+- [x] 학부모 예약/조회 기준을 학년, 반, 이름 중심으로 개선
+  - [x] `/parent`, `/booking/[teacherId]`, `/check-reservation` 입력 흐름을 `학년 + 반 + 이름` 기준으로 조정
+  - [x] 로그인한 학부모의 `/parent`와 공유 예약 링크 화면에서 가입 프로필의 학년, 반, 자녀 이름을 자동 입력
+  - [x] 예약 문서에 `grade`, `classNum`을 함께 저장하고 기존 `studentNumber`는 선택값처럼 호환 처리
+  - [x] 기존 예약 문서도 조회되도록 담임 교사 정보 기반 fallback 검색 로직 추가
+  - [x] `npm run lint`, `npx tsc --noEmit`, `npm run build` 검증 완료
 - [x] 최신 변경 사항 깃허브 업로드 (`main` 브랜치)
 ## 예정된 작업
 - [x] 교사와 학부모 매칭 누락 문제 해결 (가입 순서 무관 매칭 또는 로그인 시 매칭 갱신 등)
@@ -164,3 +172,14 @@
 - [x] AI 카테고리 체계 개선 및 린트 오류 수정 후 깃허브 업로드 (`main` 브랜치)
 - [ ] Firebase Console 설정 (Authentication 활성화, Firestore 규칙)
 - [ ] Vercel 배포
+- [x] 공개 예약 조회 화면을 학교 기준까지 포함하도록 보강
+  - [x] `/check-reservation`에 학교 검색/선택 입력을 추가하고 로그인한 학부모는 가입 학교 정보를 자동 입력
+  - [x] 예약 조회 헬퍼가 `schoolCode + 학년 + 반 + 이름` 기준으로 필터링되도록 확장
+  - [x] `/parent` 조회도 `matchedTeacherId` 예외 상황에서 `schoolCode`를 함께 사용하도록 보강
+  - [x] `SchoolSearch`에 밝은 폼용 스타일 옵션을 추가해 기존 가입 화면 흐름은 유지하고 공개 조회 화면에 재사용
+  - [x] `npm run lint`, `npx tsc --noEmit`, `npm run build` 검증 완료
+- [x] 기존 가입 학부모의 누락된 자녀 이름 입력 흐름 보강
+  - [x] `/parent`, `/booking/[teacherId]`에서 로그인한 학부모의 자녀 이름이 비어 있을 때 자동 다음 단계 진입을 막고 이름 입력 후에만 예약 시작
+  - [x] 누락된 자녀 이름을 예약 1단계에서 입력하면 학부모 프로필에도 저장해 이후에는 자동 입력되도록 보강
+  - [x] 이름이 저장된 학부모만 이름 입력칸을 읽기 전용으로 유지하고, 누락된 경우에는 `/parent`, `/booking/[teacherId]`, `/check-reservation`에서 직접 입력 가능하도록 조정
+  - [x] `npm run lint`, `npx tsc --noEmit`, `npm run build` 검증 완료

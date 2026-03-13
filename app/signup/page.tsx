@@ -117,7 +117,7 @@ function SignUpForm() {
                 schoolCode,
                 grade,
                 classNum,
-                ...(role === 'parent' ? { studentName } : {}),
+                ...(role === 'parent' ? { studentName: studentName.trim() } : {}),
             });
 
             router.push('/');

@@ -16,6 +16,12 @@ export default function LoginPage() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
+    const isOfflineProfileError = (value: { code?: string; message?: string }) =>
+        value.code === 'unavailable' ||
+        value.code === 'firestore/unavailable' ||
+        value.message?.includes('client is offline') ||
+        value.message?.includes('offline');
+
     const handleEmailLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -46,6 +52,8 @@ export default function LoginPage() {
                 setError(t('userNotFound'));
             } else if (firebaseError.code === 'auth/too-many-requests') {
                 setError(t('tooManyRequests'));
+            } else if (isOfflineProfileError(firebaseError)) {
+                setError(t('networkUnavailable'));
             } else {
                 setError(t('loginFailed'));
             }
@@ -83,6 +91,8 @@ export default function LoginPage() {
                 setError(t('googleLoginDisabled'));
             } else if (firebaseError.code === 'auth/popup-blocked') {
                 setError(t('popupBlocked'));
+            } else if (isOfflineProfileError(firebaseError)) {
+                setError(t('networkUnavailable'));
             } else {
                 setError(`${t('googleLoginFailed')} (${firebaseError.code || ''})`);
             }

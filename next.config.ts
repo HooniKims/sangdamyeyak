@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: '/sw.js',
+        source: '/sw-v2.js',
         headers: [
           {
             key: 'Service-Worker-Allowed',

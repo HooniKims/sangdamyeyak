@@ -38,6 +38,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (firebaseUser) {
                 try {
                     const userProfile = await getUserProfile(firebaseUser.uid);
+
+                    if (userProfile?.role === 'parent') {
+                        await signOutUser();
+                        setUser(null);
+                        setProfile(null);
+                        setLoading(false);
+                        return;
+                    }
+
                     setProfile(userProfile);
                 } catch (error) {
                     console.error('프로필 로드 오류:', error);

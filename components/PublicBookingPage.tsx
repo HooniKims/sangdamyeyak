@@ -1,9 +1,9 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { collection, doc, onSnapshot, query, runTransaction, where } from 'firebase/firestore';
-import Link from 'next/link';
 import { Calendar, CheckCircle2, Clock, MessageSquare, Search, User } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import Layout from '@/components/Layout';
@@ -12,22 +12,14 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import { AvailableSlot, COUNSELING_TOPICS, CounselingTopic } from '@/types';
 import { formatDate, formatDateI18n } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n';
-import { useAuth } from '@/components/AuthContext';
-import { updateParentStudentName } from '@/lib/auth-firebase';
-import PublicBookingPage from '@/components/PublicBookingPage';
 import { formatStudentLookupLabel } from '@/lib/reservation-firebase';
 
 const SLOT_ALREADY_RESERVED_ERROR = 'slot-already-reserved';
 
-export default function BookingPage() {
-  return <PublicBookingPage />;
-}
-
-export function LegacyBookingPage() {
+export default function PublicBookingPage() {
   const params = useParams<{ teacherId: string }>();
   const teacherId = Array.isArray(params.teacherId) ? params.teacherId[0] : params.teacherId;
   const { t, language } = useLanguage();
-  const { profile, user, refreshProfile } = useAuth();
 
   const [step, setStep] = useState<1 | 2>(1);
   const [grade, setGrade] = useState(1);
@@ -41,24 +33,6 @@ export function LegacyBookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
-  const parentStudentName =
-    profile?.role === 'parent'
-      ? ((profile as import('@/types/auth').ParentProfile).studentName || '').trim()
-      : '';
-  const shouldLockStudentName = profile?.role === 'parent' && Boolean(parentStudentName);
-
-  useEffect(() => {
-    if (profile?.role === 'parent') {
-      const parentProfile = profile as import('@/types/auth').ParentProfile;
-      const nextStudentName = (parentProfile.studentName || '').trim();
-      setGrade(parentProfile.grade);
-      setClassNum(parentProfile.classNum);
-      setStudentName(nextStudentName);
-      if (nextStudentName) {
-        setStep(prev => (prev === 1 ? 2 : prev));
-      }
-    }
-  }, [profile]);
 
   useEffect(() => {
     if (!teacherId) return;
@@ -104,26 +78,9 @@ export function LegacyBookingPage() {
     }
   }, [availableSlots, selectedSlot, t]);
 
-  const handleStep1Submit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleStep1Submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const trimmedStudentName = studentName.trim();
-
-    if (!trimmedStudentName) {
-      alert(t('enterStudentInfo'));
-      return;
-    }
-
-    setStudentName(trimmedStudentName);
-
-    if (profile?.role === 'parent' && user && !parentStudentName) {
-      try {
-        await updateParentStudentName(user.uid, trimmedStudentName);
-        await refreshProfile();
-      } catch (error) {
-        console.error('Failed to persist parent student name:', error);
-      }
-    }
-
+    setSubmissionError('');
     setStep(2);
   };
 
@@ -138,6 +95,13 @@ export function LegacyBookingPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    const trimmedStudentName = studentName.trim();
+
+    if (!trimmedStudentName) {
+      setSubmissionError(t('enterStudentName'));
+      return;
+    }
 
     if (!selectedSlot || selectedSlot.status !== 'available') {
       setSubmissionError(t('alreadyReserved'));
@@ -163,7 +127,7 @@ export function LegacyBookingPage() {
           teacherId,
           slotId: selectedSlot.id,
           studentNumber: '',
-          studentName: studentName.trim(),
+          studentName: trimmedStudentName,
           grade,
           classNum,
           date: selectedSlot.date,
@@ -178,9 +142,10 @@ export function LegacyBookingPage() {
         });
       });
 
+      setStudentName(trimmedStudentName);
       setSuccess(true);
     } catch (error) {
-      console.error('예약 오류:', error);
+      console.error('Booking error:', error);
       setSubmissionError(
         error instanceof Error && error.message === SLOT_ALREADY_RESERVED_ERROR
           ? t('alreadyReserved')
@@ -244,7 +209,7 @@ export function LegacyBookingPage() {
 
   if (step === 1) {
     return (
-      <Layout title={t('bookReservation')} description={t('enterStudentInfo')}>
+      <Layout title={t('bookReservation')} description={t('selectAvailableTime')}>
         <form onSubmit={handleStep1Submit} className="p-6 sm:p-8">
           <div className="mx-auto max-w-md space-y-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -256,12 +221,12 @@ export function LegacyBookingPage() {
                 <select
                   value={grade}
                   onChange={e => setGrade(Number(e.target.value))}
-                  disabled={profile?.role === 'parent'}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500"
                 >
                   {[1, 2, 3, 4, 5, 6].map((gradeOption) => (
                     <option key={gradeOption} value={gradeOption}>
-                      {gradeOption}{t('gradeUnit')}
+                      {gradeOption}
+                      {t('gradeUnit')}
                     </option>
                   ))}
                 </select>
@@ -275,32 +240,16 @@ export function LegacyBookingPage() {
                 <select
                   value={classNum}
                   onChange={e => setClassNum(Number(e.target.value))}
-                  disabled={profile?.role === 'parent'}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500"
                 >
                   {Array.from({ length: 15 }, (_, index) => index + 1).map((classOption) => (
                     <option key={classOption} value={classOption}>
-                      {classOption}{t('classUnit')}
+                      {classOption}
+                      {t('classUnit')}
                     </option>
                   ))}
                 </select>
               </div>
-            </div>
-
-            <div>
-              <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
-                <User className="mr-2 h-4 w-4" />
-                {t('studentNameField')}
-              </label>
-              <input
-                type="text"
-                value={studentName}
-                onChange={e => setStudentName(e.target.value)}
-                placeholder={t('studentNameFieldPlaceholder')}
-                readOnly={shouldLockStudentName}
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500 read-only:bg-gray-100 read-only:text-gray-600"
-                required
-              />
             </div>
 
             <Button type="submit" size="lg" className="w-full">
@@ -318,13 +267,13 @@ export function LegacyBookingPage() {
         <div className="mx-auto max-w-3xl space-y-8">
           <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
             <div className="font-medium">
-              {formatStudentLookupLabel({ grade, classNum, studentName }, language)}
+              {grade}
+              {t('gradeUnit')} {classNum}
+              {t('classUnit')}
             </div>
-            {profile?.role !== 'parent' && (
-              <Button type="button" onClick={() => setStep(1)} variant="ghost" size="sm">
-                {t('editInfo')}
-              </Button>
-            )}
+            <Button type="button" onClick={() => setStep(1)} variant="ghost" size="sm">
+              {t('editInfo')}
+            </Button>
           </div>
 
           <div>
@@ -400,7 +349,8 @@ export function LegacyBookingPage() {
                 />
                 <div>
                   <div className="font-medium text-gray-900">
-                    {formatDateI18n(selectedSlot.date, language)} {t('periodLabel', { number: selectedSlot.period })}
+                    {formatDateI18n(selectedSlot.date, language)}{' '}
+                    {t('periodLabel', { number: selectedSlot.period })}
                   </div>
                   <div className="text-sm text-gray-700">
                     {selectedSlot.startTime} ~ {selectedSlot.endTime}
@@ -414,6 +364,21 @@ export function LegacyBookingPage() {
               </div>
             </div>
           )}
+
+          <div>
+            <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
+              <User className="mr-2 h-4 w-4" />
+              {t('studentNameField')}
+            </label>
+            <input
+              type="text"
+              value={studentName}
+              onChange={e => setStudentName(e.target.value)}
+              placeholder={t('studentNameFieldPlaceholder')}
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
 
           {submissionError && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">

@@ -9,7 +9,7 @@ import { useLanguage } from '@/lib/i18n';
 
 export default function LoginPage() {
     const router = useRouter();
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -29,6 +29,12 @@ export default function LoginPage() {
 
             if (firebaseError.message === 'ACCOUNT_LOCKED') {
                 setError(t('accountLocked'));
+            } else if (firebaseError.message === 'PARENT_LOGIN_REMOVED') {
+                setError(
+                    language === 'ko'
+                        ? '학부모 로그인은 종료되었습니다. 학부모용 페이지에서 학교, 학년, 반을 입력해 바로 예약해 주세요.'
+                        : 'Parent login has been removed. Please use the parent page directly with school, grade, and class information.',
+                );
             } else if (firebaseError.message === 'PROFILE_NOT_FOUND') {
                 setError(t('profileNotFound'));
             } else if (
@@ -65,6 +71,12 @@ export default function LoginPage() {
 
             if (firebaseError.message === 'ACCOUNT_LOCKED') {
                 setError(t('accountLocked'));
+            } else if (firebaseError.message === 'PARENT_LOGIN_REMOVED') {
+                setError(
+                    language === 'ko'
+                        ? '학부모 로그인은 종료되었습니다. 학부모용 페이지에서 학교, 학년, 반을 입력해 바로 예약해 주세요.'
+                        : 'Parent login has been removed. Please use the parent page directly with school, grade, and class information.',
+                );
             } else if (firebaseError.code === 'auth/popup-closed-by-user' || firebaseError.code === 'auth/cancelled-popup-request') {
                 // ignore
             } else if (firebaseError.code === 'auth/operation-not-allowed') {

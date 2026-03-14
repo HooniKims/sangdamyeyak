@@ -10,6 +10,7 @@ import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import SchoolSearch from '@/components/SchoolSearch';
 import { useAuth } from '@/components/AuthContext';
+import PublicCheckReservationPage from '@/components/PublicCheckReservationPage';
 import { Reservation } from '@/types';
 import { SchoolInfo } from '@/types/auth';
 import { formatDateI18n } from '@/lib/utils';
@@ -19,6 +20,10 @@ import {
 } from '@/lib/reservation-firebase';
 
 export default function CheckReservationPage() {
+  return <PublicCheckReservationPage />;
+}
+
+export function LegacyCheckReservationPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [schoolName, setSchoolName] = useState('');
   const [schoolCode, setSchoolCode] = useState('');

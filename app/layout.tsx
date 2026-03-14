@@ -5,13 +5,13 @@ import { AuthProvider } from "@/components/AuthContext";
 import { LanguageProvider } from "@/lib/i18n";
 
 export const metadata: Metadata = {
-  title: "스쿨홀릭 - 학부모 커뮤니케이션 플랫폼",
-  description: "알림장과 상담 예약을 한곳에서. 교사와 학부모를 위한 스마트 학교 커뮤니케이션 플랫폼",
+  title: "상담 예약 도우미 - 학부모 커뮤니케이션 플랫폼",
+  description: "교사와 학부모를 위한 상담 예약 전용 플랫폼",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "스쿨홀릭",
+    title: "상담 예약 도우미",
   },
 };
 

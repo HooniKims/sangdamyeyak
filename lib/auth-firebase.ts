@@ -276,6 +276,11 @@ export async function signInWithEmail(
             throw new Error('PROFILE_NOT_FOUND');
         }
 
+        if (profile.role === 'parent') {
+            await signOut(auth);
+            throw new Error('PARENT_LOGIN_REMOVED');
+        }
+
         return { user, profile };
     } catch (error: unknown) {
         const firebaseError = error as { code?: string; message?: string };
@@ -318,6 +323,12 @@ export async function signInWithGoogle(): Promise<{
             await signOut(auth);
             throw new Error('ACCOUNT_LOCKED');
         }
+
+        if (profile.role === 'parent') {
+            await signOut(auth);
+            throw new Error('PARENT_LOGIN_REMOVED');
+        }
+
         return { user, profile, isNewUser: false };
     }
 

@@ -1,4 +1,8 @@
+'use client';
+
 import React from 'react';
+import Link from 'next/link';
+import { useLanguage } from '@/lib/i18n';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -7,6 +11,8 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, title, description }: LayoutProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="layout-page min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 transition-colors duration-300">
       <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8 sm:px-6 lg:px-8">
@@ -26,6 +32,14 @@ export default function Layout({ children, title, description }: LayoutProps) {
         )}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 transition-colors duration-300">
           {children}
+        </div>
+        <div className="mt-4 flex justify-center">
+          <Link
+            href="/privacy"
+            className="text-sm text-slate-500 transition hover:text-slate-800"
+          >
+            {t('privacyPolicy')}
+          </Link>
         </div>
       </div>
     </div>

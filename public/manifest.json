@@ -1,7 +1,7 @@
 {
-    "name": "스쿨홀릭 - 학부모 커뮤니케이션 플랫폼",
-    "short_name": "스쿨홀릭",
-    "description": "알림장과 상담 예약을 한곳에서. 교사와 학부모를 위한 스마트 학교 커뮤니케이션 플랫폼",
+    "name": "상담 예약 도우미 - 학부모 커뮤니케이션 플랫폼",
+    "short_name": "상담 예약 도우미",
+    "description": "교사와 학부모를 위한 상담 예약 전용 플랫폼",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#0f172a",

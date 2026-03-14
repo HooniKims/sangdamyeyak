@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Settings, Users, MessageCircle, CalendarPlus, LogIn, LogOut, User, Shield, Key, Globe } from 'lucide-react';
+import { Settings, MessageCircle, CalendarPlus, LogIn, LogOut, User, Shield, Key, Globe } from 'lucide-react';
 import { useAuth } from '@/components/AuthContext';
 import UserProfileModal from '@/components/UserProfileModal';
 import { deleteAccount } from '@/lib/auth-firebase';
@@ -24,7 +24,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white relative overflow-hidden">
-      {/* Background Decorations */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
         <div className="absolute top-[-10%] left-[-5%] w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-3xl" />
         <div className="absolute bottom-[-20%] right-[-10%] w-[700px] h-[700px] bg-emerald-500/10 rounded-full blur-3xl" />
@@ -32,13 +31,11 @@ export default function Home() {
       </div>
 
       <div className="relative max-w-5xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
-        {/* Auth Header Bar */}
         <div className="flex items-center justify-end gap-3 mb-8">
-          {/* Language Toggle */}
           <button
             onClick={() => setLanguage(language === 'ko' ? 'en' : 'ko')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white/60 hover:text-white transition-all"
-            title={language === 'ko' ? 'Switch to English' : '한국어로 전환'}
+            title={language === 'ko' ? 'Switch to English' : 'Switch to Korean'}
           >
             <Globe className="w-4 h-4" />
             {language === 'ko' ? t('switchToEnglish') : t('switchToKorean')}
@@ -57,10 +54,15 @@ export default function Home() {
                   <User className="w-4 h-4 text-cyan-400" />
                 </button>
                 <span className="text-sm text-white/80">{profile.name}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs ${profile.role === 'teacher' ? 'bg-emerald-500/20 text-emerald-300' :
-                  profile.role === 'admin' ? 'bg-amber-500/20 text-amber-300' :
-                    'bg-blue-500/20 text-blue-300'
-                  }`}>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs ${
+                    profile.role === 'teacher'
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : profile.role === 'admin'
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : 'bg-blue-500/20 text-blue-300'
+                  }`}
+                >
                   {profile.role === 'teacher' ? t('teacher') : profile.role === 'admin' ? t('admin') : t('parent')}
                 </span>
               </div>
@@ -99,7 +101,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Header */}
         <div className="text-center mb-16">
           <span className="inline-block px-4 py-1.5 rounded-full bg-cyan-500/15 border border-cyan-400/30 text-xs font-bold tracking-wider uppercase text-cyan-300 mb-6">
             {t('smartSchoolPlatform')}
@@ -108,54 +109,25 @@ export default function Home() {
             {t('schoolholic')}
           </h1>
           <p className="text-lg text-blue-200/80 max-w-2xl mx-auto leading-relaxed">
-            {t('mainSubtitle')}<br className="hidden sm:block" />
+            {t('mainSubtitle')}
+            <br className="hidden sm:block" />
             {t('mainSubtitle2')}
           </p>
         </div>
 
-        {/* Main Feature Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-          {/* 알림장 카드 */}
-          <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all duration-300 group">
+        <div className="mb-12 max-w-3xl mx-auto">
+          <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all duration-300">
             <h2 className="text-3xl font-bold text-white mb-4 flex items-center gap-3">
-              <span className="text-4xl select-none group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300 drop-shadow-md">📋</span>
-              {t('notice')}
-            </h2>
-            <p className="text-blue-200/70 mb-6 text-sm leading-relaxed">
-              <strong className="text-emerald-300 font-semibold">{t('noticeDesc1')}</strong>{t('noticeDesc2')}<br />
-              <strong className="text-white font-medium">{t('noticeDesc3')}</strong>{t('noticeDesc4')}
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {(!profile || profile.role === 'teacher' || profile.role === 'admin') && (
-                <Link
-                  href="/notice/teacher"
-                  className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-semibold transition-all duration-300 text-sm active:scale-[0.98] hover:-translate-y-1 hover:shadow-lg hover:shadow-emerald-500/40"
-                >
-                  <Settings className="w-4 h-4" />
-                  {t('teacherUse')}
-                </Link>
-              )}
-              {(!profile || profile.role === 'parent' || profile.role === 'admin') && (
-                <Link
-                  href="/notice/parents"
-                  className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl font-semibold transition-all duration-300 text-sm active:scale-[0.98] hover:-translate-y-1 hover:shadow-lg hover:shadow-teal-500/40"
-                >
-                  <Users className="w-4 h-4" />
-                  {t('parentUse')}
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {/* 상담 예약 카드 */}
-          <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all duration-300 group">
-            <h2 className="text-3xl font-bold text-white mb-4 flex items-center gap-3">
-              <span className="text-4xl select-none group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 drop-shadow-md">🗓️</span>
+              <CalendarPlus className="w-8 h-8 text-blue-300" />
               {t('counseling')}
             </h2>
             <p className="text-blue-200/70 mb-6 text-sm leading-relaxed">
-              {t('counselingDesc1')}<strong className="text-blue-300 font-semibold">{t('counselingDesc2')}</strong>{t('counselingDesc3')}<br />
-              <strong className="text-white font-medium">{t('counselingDesc4')}</strong>{t('counselingDesc5')}
+              {t('counselingDesc1')}
+              <strong className="text-blue-300 font-semibold">{t('counselingDesc2')}</strong>
+              {t('counselingDesc3')}
+              <br />
+              <strong className="text-white font-medium">{t('counselingDesc4')}</strong>
+              {t('counselingDesc5')}
             </p>
             <div className="grid grid-cols-2 gap-3">
               {(!profile || profile.role === 'teacher' || profile.role === 'admin') && (
@@ -167,27 +139,31 @@ export default function Home() {
                   {t('teacherUse')}
                 </Link>
               )}
-              {(!profile || profile.role === 'parent' || profile.role === 'admin') && (
-                <Link
-                  href="/parent"
-                  className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-semibold transition-all duration-300 text-sm active:scale-[0.98] hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/40"
-                >
-                  <CalendarPlus className="w-4 h-4" />
-                  {t('parentUse')}
-                </Link>
-              )}
+              <Link
+                href="/parent"
+                className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-semibold transition-all duration-300 text-sm active:scale-[0.98] hover:-translate-y-1 hover:shadow-lg hover:shadow-indigo-500/40"
+              >
+                <CalendarPlus className="w-4 h-4" />
+                {t('parentUse')}
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* Info Banner */}
         <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 text-center">
           <MessageCircle className="w-8 h-8 text-blue-300 mx-auto mb-3 opacity-70" />
           {user && profile ? (
             <>
               <h3 className="font-semibold text-white mb-2">{t('helloUser', { name: profile.name })}</h3>
               <p className="text-sm text-blue-200/70 max-w-lg mx-auto">
-                {profile.schoolName && <><strong className="text-white">{profile.schoolName}</strong> {profile.grade}{t('gradeUnit')} {profile.classNum}{t('classUnit')}<br /></>}
+                {profile.schoolName && (
+                  <>
+                    <strong className="text-white">{profile.schoolName}</strong> {profile.grade}
+                    {t('gradeUnit')} {profile.classNum}
+                    {t('classUnit')}
+                    <br />
+                  </>
+                )}
                 {profile.role === 'teacher' ? t('teacherWelcome') : t('parentWelcome')}
               </p>
             </>
@@ -195,21 +171,27 @@ export default function Home() {
             <>
               <h3 className="font-semibold text-white mb-2">{t('firstVisit')}</h3>
               <p className="text-sm text-blue-200/70 max-w-lg mx-auto">
-                <strong className="text-white">{t('firstVisitTeacher')}</strong>{t('firstVisitTeacherDesc')}
+                <strong className="text-white">{t('firstVisitTeacher')}</strong>
+                {t('firstVisitTeacherDesc')}
                 <br />
-                <strong className="text-white">{t('firstVisitParent')}</strong>{t('firstVisitParentDesc')}
+                <strong className="text-white">{t('firstVisitParent')}</strong>
+                {t('firstVisitParentDesc')}
               </p>
             </>
           )}
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-blue-300/40 mt-12">
-          {t('footer')}
-        </p>
+        <div className="mt-12 text-center">
+          <p className="text-xs text-blue-300/40">{t('footer')}</p>
+          <Link
+            href="/privacy"
+            className="mt-3 inline-block text-sm text-cyan-300/80 transition hover:text-cyan-200"
+          >
+            {t('privacyPolicy')}
+          </Link>
+        </div>
       </div>
 
-      {/* 프로필 모달 */}
       {profile && (
         <UserProfileModal
           isOpen={showProfileModal}

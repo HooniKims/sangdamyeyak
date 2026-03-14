@@ -1,34 +1,52 @@
-# 스쿨홀릭 (Schoolholic) - 통합 학교 커뮤니케이션 플랫폼
+# 상담 예약 도우미 (구 schoolholic) - 학부모 상담 예약 플랫폼
 
-## 프로젝트 개요
+## 현재 프로젝트 개요
 - **프레임워크**: Next.js 16 (App Router) + TypeScript + Tailwind CSS v4
 - **배포 대상**: Vercel
-- **Firebase**: Firestore (알림장 & 상담 예약 데이터) + Authentication (이메일/비밀번호 + Google 로그인)
-  - 기존 데이터베이스 구조와 문서를 그대로 유지 (데이터 손실 없음)
-  - 알림장(`notes`), 교사정보(`teachers`), 상담슬롯(`availableSlots`), 예약정보(`reservations`), 사용자(`users`) 컬렉션 공존
-- **AI**: 로컬 LLM (Ollama via api.alluser.site 프록시, 브라우저 직접 호출)
-- **디자인/UI**: 
-  - 기본 폰트: 가독성을 높인 **Pretendard** 적용
-  - 다크 테마 기반 글래스모피즘(Glassmorphism)
-  - 직관적인 이모지 타이틀 및 인터랙티브 호버 애니메이션(Hover Glow & Translate) 적용
+- **Firebase**: Firestore + Authentication
+  - 현재 주요 컬렉션은 `availableSlots`, `reservations`, `users`
+  - 교사/관리자 계정은 이메일/비밀번호 및 Google 로그인을 사용
+  - 학부모는 공개 예약 페이지에서 학교/학년/반/이름 기반으로 예약/조회하는 방향으로 전환 중
+- **서비스 범위**: 현재 워킹트리 기준 알림장/AI 기능은 제거되고 상담 예약 기능 중심으로 정리 중
+- **디자인/UI**:
+  - 기본 폰트: **Pretendard**
+  - 다크 테마 기반 글래스모피즘 스타일 유지
   - **PWA 지원** (manifest.json + Service Worker + 오프라인 캐싱)
 
-## 라우트 구조
+## 현재 라우트 구조
 | 경로 | 설명 |
 |------|------|
 | `/` | 메인 랜딩 페이지 |
-| `/login` | 로그인 (이메일/비밀번호 + Google) |
-| `/signup` | 회원가입 (교사/학부모 역할 선택) |
-| `/forgot-password` | 비밀번호 찾기 (이메일 재설정) |
+| `/login` | 로그인 (현재 교사/관리자 계정 중심) |
+| `/signup` | 회원가입 (현재 워킹트리 기준 교사 가입 흐름으로 정리 중) |
+| `/forgot-password` | 비밀번호 찾기 |
 | `/change-password` | 비밀번호 변경 |
 | `/admin` | 관리자 페이지 (계정 잠금 해제) |
-| `/notice/teacher` | 알림장 - 교사용 (작성/AI정리/저장/삭제) |
-| `/notice/parents` | 알림장 - 학부모용 (날짜별 조회) |
 | `/teacher` | 상담 예약 - 교사용 (시간 설정/예약 관리) |
-| `/parent` | 상담 예약 - 학부모용 (예약/조회/취소) |
-| `/booking/[teacherId]` | 상담 예약 - 교사 링크 직접 접근 |
-| `/check-reservation` | 상담 예약 조회 및 취소 |
+| `/parent` | 학부모 공개 예약/조회 페이지 |
+| `/booking/[teacherId]` | 교사 공유 링크 기반 공개 예약 페이지 |
+| `/check-reservation` | 공개 예약 조회 및 취소 페이지 |
 | `/api/auth/check-lock` | 서버 사이드 로그인 잠금 검증 API |
+
+## 2026-03-15 점검 결과
+- [x] 알림장 관련 라우트/서비스/렌더러 제거
+  - [x] `app/notice/teacher/page.tsx`, `app/notice/parents/page.tsx` 삭제
+  - [x] `lib/notice-ai.ts`, `lib/notice-firebase.ts`, `components/NoticeMarkdown.tsx` 삭제
+- [x] 알림장 전용 의존성 제거
+  - [x] `openai`, `react-markdown`, `remark-gfm` 제거
+- [x] 앱 브랜딩과 메타데이터를 상담 예약 전용으로 정리
+  - [x] `app/page.tsx`, `app/layout.tsx`, `public/manifest.json`, `public/sw.js`, `lib/i18n.ts` 반영
+- [x] 학부모 화면을 공개용 엔트리로 분리
+  - [x] `/parent`, `/booking/[teacherId]`, `/check-reservation`가 `Public*Page` 컴포넌트를 기본 엔트리로 사용
+  - [x] 기존 로그인 연동 버전은 `LegacyParentPage`, `LegacyBookingPage`, `LegacyCheckReservationPage`로 보존
+- [x] 학부모 로그인 차단 및 공개 페이지 유도 반영
+  - [x] `lib/auth-firebase.ts`, `components/AuthContext.tsx`, `app/login/page.tsx`에 `PARENT_LOGIN_REMOVED` 처리 추가
+- [x] `npm run lint` 통과 (2026-03-15)
+- [ ] `npx tsc --noEmit` 실패 (2026-03-15)
+  - [ ] `app/signup/page.tsx`에서 제거된 학부모 가입 상태 `studentName`, `setStudentName` 참조가 남아 있음
+- [ ] `npm run build` 재검증 필요 (2026-03-15)
+  - [ ] 현재 Windows 파일 잠금으로 `.next/server/server-reference-manifest.json` rename 단계에서 `EPERM` 발생
+  - [ ] 타입 오류 수정 후 빌드 재실행 필요
 
 ## 완료된 작업
 - [x] 깃허브 레포지토리 복제 (schoolalarm, counseling-reservation)
@@ -183,3 +201,4 @@
   - [x] 상단 프로필 아이콘으로 여는 '내 정보' 팝업에서만 학년/반 변경 옵션 제공 유지
   - [x] 강제 학년/반 확인 팝업은 2027년 3월 1일부터만 표시되도록 제한
 - [x] 최신 변경 사항 깃허브 업로드 (`main` 브랜치) - 2026-03-14
+- [x] `schoolholic` 깃허브 저장소 내용을 `sangdamyeyak` 폴더로 직접 복제 완료

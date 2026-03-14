@@ -1,4 +1,4 @@
-const CACHE_NAME = 'schoolholic-v1';
+const CACHE_NAME = 'counseling-booking-helper-v1';
 const OFFLINE_URL = '/';
 
 // 캐싱할 정적 자원
@@ -82,7 +82,7 @@ self.addEventListener('fetch', (event) => {
 
 // 푸시 알림 수신 처리
 self.addEventListener('push', (event) => {
-    let data = { title: '스쿨홀릭', body: '새로운 알림이 있습니다.' };
+    let data = { title: '상담 예약 도우미', body: '새로운 상담 예약 알림이 있습니다.' };
 
     if (event.data) {
         try {
@@ -97,7 +97,7 @@ self.addEventListener('push', (event) => {
         icon: '/icons/icon-192x192.png',
         badge: '/icons/icon-72x72.png',
         vibrate: [200, 100, 200],
-        tag: data.tag || 'schoolholic-notification',
+        tag: data.tag || 'counseling-booking-helper-notification',
         data: {
             url: data.url || '/',
         },

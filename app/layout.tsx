@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AnnualGradeClassUpdateGate from "@/components/AnnualGradeClassUpdateGate";
 import { AuthProvider } from "@/components/AuthContext";
 import { LanguageProvider } from "@/lib/i18n";
 
@@ -34,6 +35,7 @@ export default function RootLayout({
       <body className="antialiased" suppressHydrationWarning>
         <AuthProvider>
           <LanguageProvider>
+            <AnnualGradeClassUpdateGate />
             {children}
           </LanguageProvider>
         </AuthProvider>

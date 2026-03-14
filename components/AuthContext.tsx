@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getUserProfile, signOutUser } from '@/lib/auth-firebase';
+import { requiresAnnualGradeClassUpdate } from '@/lib/school-year';
 import { UserProfile } from '@/types/auth';
 
 interface AuthContextType {
@@ -12,6 +13,7 @@ interface AuthContextType {
     loading: boolean;
     logout: () => Promise<void>;
     refreshProfile: () => Promise<void>;
+    requiresGradeClassUpdate: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -20,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({
     loading: true,
     logout: async () => { },
     refreshProfile: async () => { },
+    requiresGradeClassUpdate: false,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -63,8 +66,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const requiresGradeClassUpdate = requiresAnnualGradeClassUpdate(profile);
+
     return (
-        <AuthContext.Provider value={{ user, profile, loading, logout, refreshProfile }}>
+        <AuthContext.Provider
+            value={{
+                user,
+                profile,
+                loading,
+                logout,
+                refreshProfile,
+                requiresGradeClassUpdate,
+            }}
+        >
             {children}
         </AuthContext.Provider>
     );

@@ -1,17 +1,34 @@
 'use client';
 
+import type { ComponentType } from 'react';
 import { useAuth } from '@/components/AuthContext';
 import UserProfileModal from '@/components/UserProfileModal';
+import type { UserProfile } from '@/types/auth';
+
+type AnnualGateAuth = ReturnType<typeof useAuth> & {
+    requiresGradeClassUpdate?: boolean;
+};
+
+type AnnualGateModalProps = {
+    isOpen: boolean;
+    onClose: () => void;
+    profile: UserProfile;
+    onDeleteAccount: () => Promise<void>;
+    onProfileUpdated?: () => Promise<void>;
+    forceGradeClassUpdate?: boolean;
+};
 
 export default function AnnualGradeClassUpdateGate() {
-    const { profile, loading, refreshProfile, requiresGradeClassUpdate } = useAuth();
+    const auth = useAuth() as AnnualGateAuth;
+    const { profile, loading, refreshProfile } = auth;
+    const UserProfileModalCompat = UserProfileModal as ComponentType<AnnualGateModalProps>;
 
-    if (loading || !profile || !requiresGradeClassUpdate) {
+    if (loading || !profile || !auth.requiresGradeClassUpdate) {
         return null;
     }
 
     return (
-        <UserProfileModal
+        <UserProfileModalCompat
             isOpen
             onClose={() => {}}
             profile={profile}

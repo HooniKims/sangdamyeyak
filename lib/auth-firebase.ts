@@ -22,9 +22,152 @@ import {
     getDocs,
     Timestamp,
     serverTimestamp,
+    writeBatch,
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from './firebase';
 import { UserProfile, UserRole, ParentProfile } from '@/types/auth';
+import { getCurrentSchoolYear } from '@/lib/school-year';
+
+const USER_BATCH_LIMIT = 400;
+
+type ParentMatchUpdate = {
+    uid: string;
+    matchedTeacherId: string | null;
+};
+
+type ParentClassInfo = {
+    uid: string;
+    schoolCode: string;
+    grade: number;
+    classNum: number;
+};
+
+function extractParentClassInfo(
+    uid: string,
+    data: Partial<ParentProfile>
+): ParentClassInfo | null {
+    if (
+        data.role !== 'parent' ||
+        !data.schoolCode ||
+        typeof data.grade !== 'number' ||
+        typeof data.classNum !== 'number'
+    ) {
+        return null;
+    }
+
+    return {
+        uid,
+        schoolCode: data.schoolCode,
+        grade: data.grade,
+        classNum: data.classNum,
+    };
+}
+
+async function applyParentMatchUpdates(updates: ParentMatchUpdate[]): Promise<void> {
+    if (updates.length === 0) {
+        return;
+    }
+
+    for (let index = 0; index < updates.length; index += USER_BATCH_LIMIT) {
+        const batch = writeBatch(db);
+
+        updates.slice(index, index + USER_BATCH_LIMIT).forEach(({ uid, matchedTeacherId }) => {
+            batch.update(doc(db, 'users', uid), {
+                matchedTeacherId,
+                updatedAt: serverTimestamp(),
+            });
+        });
+
+        await batch.commit();
+    }
+}
+
+async function syncMatchedParentsForTeacher(
+    teacherUid: string,
+    schoolCode: string,
+    grade: number,
+    classNum: number
+): Promise<void> {
+    if (!schoolCode) {
+        return;
+    }
+
+    const [currentlyMatchedSnapshot, sameSchoolSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'users'), where('matchedTeacherId', '==', teacherUid))),
+        getDocs(query(collection(db, 'users'), where('schoolCode', '==', schoolCode))),
+    ]);
+
+    const updatesByUid = new Map<string, string | null>();
+
+    await Promise.all(
+        currentlyMatchedSnapshot.docs.map(async (docSnap) => {
+            const parent = extractParentClassInfo(
+                docSnap.id,
+                docSnap.data() as Partial<ParentProfile>
+            );
+
+            if (!parent) {
+                return;
+            }
+
+            if (
+                parent.schoolCode === schoolCode &&
+                parent.grade === grade &&
+                parent.classNum === classNum
+            ) {
+                updatesByUid.set(parent.uid, teacherUid);
+                return;
+            }
+
+            const rematchedTeacherId = await matchTeacher(
+                parent.schoolCode,
+                parent.grade,
+                parent.classNum
+            );
+            updatesByUid.set(parent.uid, rematchedTeacherId);
+        })
+    );
+
+    sameSchoolSnapshot.docs.forEach((docSnap) => {
+        const parent = extractParentClassInfo(
+            docSnap.id,
+            docSnap.data() as Partial<ParentProfile>
+        );
+
+        if (!parent || parent.grade !== grade || parent.classNum !== classNum) {
+            return;
+        }
+
+        updatesByUid.set(parent.uid, teacherUid);
+    });
+
+    await applyParentMatchUpdates(
+        [...updatesByUid.entries()].map(([uid, matchedTeacherId]) => ({
+            uid,
+            matchedTeacherId,
+        }))
+    );
+}
+
+async function isParentMatchValid(parentProfile: ParentProfile): Promise<boolean> {
+    if (!parentProfile.matchedTeacherId) {
+        return false;
+    }
+
+    const teacherSnap = await getDoc(doc(db, 'users', parentProfile.matchedTeacherId));
+    if (!teacherSnap.exists()) {
+        return false;
+    }
+
+    const teacherProfile = teacherSnap.data() as Partial<UserProfile>;
+
+    return (
+        (teacherProfile.role === 'teacher' || teacherProfile.role === 'admin') &&
+        teacherProfile.schoolCode === parentProfile.schoolCode &&
+        teacherProfile.grade === parentProfile.grade &&
+        teacherProfile.classNum === parentProfile.classNum
+    );
+}
 
 // ============================================================
 // 회원가입
@@ -51,6 +194,7 @@ export async function createUserProfile(
     }
 ): Promise<void> {
     const now = Timestamp.now();
+    const currentSchoolYear = getCurrentSchoolYear();
 
     const profileData: Record<string, unknown> = {
         uid,
@@ -63,6 +207,7 @@ export async function createUserProfile(
         classNum: data.classNum,
         isLocked: false,
         failedLoginAttempts: 0,
+        gradeClassConfirmedSchoolYear: currentSchoolYear,
         createdAt: now,
         updatedAt: now,
     };
@@ -78,6 +223,14 @@ export async function createUserProfile(
     }
 
     await setDoc(doc(db, 'users', uid), profileData);
+
+    if (data.role === 'teacher' || data.role === 'admin') {
+        try {
+            await syncMatchedParentsForTeacher(uid, data.schoolCode, data.grade, data.classNum);
+        } catch (error) {
+            console.error('Failed to backfill parent matches after teacher signup:', error);
+        }
+    }
 }
 
 // ============================================================
@@ -218,10 +371,16 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     // 학부모 로그인 시 선생님이 나중에 가입했을 경우를 대비해 매칭 자동 갱신
     if (profile.role === 'parent' && profile.schoolCode) {
         const parentProfile = profile as ParentProfile;
-        if (!parentProfile.matchedTeacherId) {
+        const hasValidMatch = await isParentMatchValid(parentProfile);
+
+        if (!hasValidMatch) {
             const tid = await matchTeacher(profile.schoolCode, profile.grade, profile.classNum);
-            if (tid) {
-                await updateDoc(doc(db, 'users', uid), { matchedTeacherId: tid });
+
+            if (tid !== parentProfile.matchedTeacherId) {
+                await updateDoc(doc(db, 'users', uid), {
+                    matchedTeacherId: tid,
+                    updatedAt: serverTimestamp(),
+                });
                 parentProfile.matchedTeacherId = tid;
             }
         }
@@ -249,6 +408,56 @@ export async function updateParentStudentName(uid: string, studentName: string):
         studentName: studentName.trim(),
         updatedAt: serverTimestamp(),
     });
+}
+
+export async function updateUserGradeClass(
+    uid: string,
+    grade: number,
+    classNum: number
+): Promise<{ matchedTeacherId: string | null }> {
+    const profileSnap = await getDoc(doc(db, 'users', uid));
+    if (!profileSnap.exists()) {
+        throw new Error('PROFILE_NOT_FOUND');
+    }
+
+    const profile = profileSnap.data() as UserProfile;
+    const currentSchoolYear = getCurrentSchoolYear();
+
+    if (profile.role === 'teacher' || profile.role === 'admin') {
+        const existingTeacherId = await matchTeacher(profile.schoolCode, grade, classNum);
+        if (existingTeacherId && existingTeacherId !== uid) {
+            throw new Error('DUPLICATE_TEACHER_CLASS');
+        }
+    }
+
+    if (profile.role === 'parent') {
+        const matchedTeacherId = await matchTeacher(profile.schoolCode, grade, classNum);
+
+        await updateDoc(doc(db, 'users', uid), {
+            grade,
+            classNum,
+            matchedTeacherId,
+            gradeClassConfirmedSchoolYear: currentSchoolYear,
+            updatedAt: serverTimestamp(),
+        });
+
+        return { matchedTeacherId };
+    }
+
+    await updateDoc(doc(db, 'users', uid), {
+        grade,
+        classNum,
+        gradeClassConfirmedSchoolYear: currentSchoolYear,
+        updatedAt: serverTimestamp(),
+    });
+
+    try {
+        await syncMatchedParentsForTeacher(uid, profile.schoolCode, grade, classNum);
+    } catch (error) {
+        console.error('Failed to sync parent matches after grade/class update:', error);
+    }
+
+    return { matchedTeacherId: null };
 }
 
 /** 로그인 실패 횟수 증가 (10회 시 잠금) */

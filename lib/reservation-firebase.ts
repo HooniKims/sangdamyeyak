@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from './firebase';
 import { Reservation } from '@/types';
 
@@ -87,7 +87,11 @@ export async function searchReservationsByStudentInfo({
 
   const reservationsQuery = teacherId
     ? query(collection(db, 'reservations'), where('teacherId', '==', teacherId))
-    : query(collection(db, 'reservations'), where('studentName', '==', trimmedStudentName));
+    : query(
+        collection(db, 'reservations'),
+        where('studentName', '==', trimmedStudentName),
+        limit(20),
+      );
 
   const snapshot = await getDocs(reservationsQuery);
   const reservations: Reservation[] = [];

@@ -236,7 +236,7 @@ function BookingTab() {
     setLoading(true);
     try {
       const slotRef = doc(db, 'availableSlots', selectedSlot.id);
-      const reservationRef = collection(db, 'reservations');
+      const reservationRef = doc(db, 'reservations', selectedSlot.id);
 
       await runTransaction(db, async transaction => {
         const slotDoc = await transaction.get(slotRef);
@@ -248,7 +248,7 @@ function BookingTab() {
         transaction.update(slotRef, { status: 'reserved' });
 
         // A new reservation document is created with a random ID
-        transaction.set(doc(reservationRef), {
+        transaction.set(reservationRef, {
           teacherId: selectedSlot.teacherId,
           slotId: selectedSlot.id,
           studentNumber: '',

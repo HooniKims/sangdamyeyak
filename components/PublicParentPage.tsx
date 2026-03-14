@@ -260,7 +260,7 @@ function BookingTab() {
 
     try {
       const slotRef = doc(db, 'availableSlots', selectedSlot.id);
-      const reservationRef = collection(db, 'reservations');
+      const reservationRef = doc(db, 'reservations', selectedSlot.id);
 
       await runTransaction(db, async transaction => {
         const slotDoc = await transaction.get(slotRef);
@@ -270,7 +270,7 @@ function BookingTab() {
         }
 
         transaction.update(slotRef, { status: 'reserved' });
-        transaction.set(doc(reservationRef), {
+        transaction.set(reservationRef, {
           teacherId: selectedSlot.teacherId,
           slotId: selectedSlot.id,
           studentNumber: '',

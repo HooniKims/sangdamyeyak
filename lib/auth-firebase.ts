@@ -93,8 +93,20 @@ async function syncMatchedParentsForTeacher(
     }
 
     const [currentlyMatchedSnapshot, sameSchoolSnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'users'), where('matchedTeacherId', '==', teacherUid))),
-        getDocs(query(collection(db, 'users'), where('schoolCode', '==', schoolCode))),
+        getDocs(
+            query(
+                collection(db, 'users'),
+                where('role', '==', 'parent'),
+                where('matchedTeacherId', '==', teacherUid)
+            )
+        ),
+        getDocs(
+            query(
+                collection(db, 'users'),
+                where('role', '==', 'parent'),
+                where('schoolCode', '==', schoolCode)
+            )
+        ),
     ]);
 
     const updatesByUid = new Map<string, string | null>();

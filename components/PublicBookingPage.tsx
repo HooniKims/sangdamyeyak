@@ -113,7 +113,7 @@ export default function PublicBookingPage() {
 
     try {
       const slotRef = doc(db, 'availableSlots', selectedSlot.id);
-      const reservationRef = doc(collection(db, 'reservations'));
+      const reservationRef = doc(db, 'reservations', selectedSlot.id);
 
       await runTransaction(db, async transaction => {
         const slotDoc = await transaction.get(slotRef);

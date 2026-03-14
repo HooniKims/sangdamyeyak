@@ -1,0 +1,299 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasCurrentUserDoc() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function currentUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function currentUserSchoolCode() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolCode;
+    }
+
+    function isAdmin() {
+      return hasCurrentUserDoc() && currentUserRole() == 'admin';
+    }
+
+    function isTeacherOrAdmin() {
+      return hasCurrentUserDoc() &&
+        (currentUserRole() == 'teacher' || currentUserRole() == 'admin');
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isPublicTeacherProfile(data) {
+      return data.role == 'teacher' || data.role == 'admin';
+    }
+
+    function canTeacherAccessParentProfile(data) {
+      return isTeacherOrAdmin() &&
+        data.role == 'parent' &&
+        (data.schoolCode == currentUserSchoolCode() || data.matchedTeacherId == request.auth.uid);
+    }
+
+    function validTeacherProfileCreate(uid) {
+      return request.resource.data.keys().hasOnly([
+          'uid',
+          'email',
+          'role',
+          'name',
+          'schoolName',
+          'schoolCode',
+          'grade',
+          'classNum',
+          'isLocked',
+          'failedLoginAttempts',
+          'gradeClassConfirmedSchoolYear',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        request.resource.data.uid == uid &&
+        request.resource.data.role == 'teacher' &&
+        request.resource.data.email is string &&
+        request.resource.data.name is string &&
+        request.resource.data.schoolName is string &&
+        request.resource.data.schoolCode is string &&
+        request.resource.data.grade is int &&
+        request.resource.data.classNum is int &&
+        request.resource.data.isLocked == false &&
+        request.resource.data.failedLoginAttempts == 0 &&
+        request.resource.data.gradeClassConfirmedSchoolYear is int &&
+        request.resource.data.createdAt is timestamp &&
+        request.resource.data.updatedAt is timestamp;
+    }
+
+    function validOwnerUserUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'grade',
+          'classNum',
+          'studentName',
+          'matchedTeacherId',
+          'gradeClassConfirmedSchoolYear',
+          'updatedAt'
+        ]) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.name == resource.data.name &&
+        request.resource.data.schoolName == resource.data.schoolName &&
+        request.resource.data.schoolCode == resource.data.schoolCode &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.isLocked == resource.data.isLocked &&
+        request.resource.data.failedLoginAttempts == resource.data.failedLoginAttempts;
+    }
+
+    function validTeacherManagedParentUpdate() {
+      return request.resource.data.role == 'parent' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'matchedTeacherId',
+          'updatedAt'
+        ]) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.name == resource.data.name &&
+        request.resource.data.schoolName == resource.data.schoolName &&
+        request.resource.data.schoolCode == resource.data.schoolCode &&
+        request.resource.data.grade == resource.data.grade &&
+        request.resource.data.classNum == resource.data.classNum &&
+        request.resource.data.studentName == resource.data.studentName &&
+        request.resource.data.isLocked == resource.data.isLocked &&
+        request.resource.data.failedLoginAttempts == resource.data.failedLoginAttempts &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.schoolCode == currentUserSchoolCode() &&
+        (
+          resource.data.matchedTeacherId == request.auth.uid ||
+          request.resource.data.matchedTeacherId == request.auth.uid ||
+          request.resource.data.matchedTeacherId == null
+        );
+    }
+
+    function validTeacherDocCreate() {
+      return request.resource.data.keys().hasOnly(['id', 'periods', 'createdAt']) &&
+        request.resource.data.id == request.auth.uid;
+    }
+
+    function validTeacherDocUpdate() {
+      return request.resource.data.keys().hasOnly(['id', 'periods', 'createdAt']) &&
+        request.resource.data.id == resource.data.id &&
+        resource.data.id == request.auth.uid;
+    }
+
+    function validSlotShape(data) {
+      return data.keys().hasOnly([
+          'teacherId',
+          'date',
+          'period',
+          'startTime',
+          'endTime',
+          'status',
+          'createdAt'
+        ]) &&
+        data.teacherId is string &&
+        data.date is string &&
+        data.period is int &&
+        data.startTime is string &&
+        data.endTime is string &&
+        (data.status == 'available' || data.status == 'reserved') &&
+        data.createdAt is int;
+    }
+
+    function validReservationShape(data, slotId) {
+      return data.keys().hasOnly([
+          'teacherId',
+          'slotId',
+          'studentNumber',
+          'studentName',
+          'grade',
+          'classNum',
+          'schoolCode',
+          'schoolName',
+          'date',
+          'period',
+          'startTime',
+          'endTime',
+          'topic',
+          'content',
+          'consultationType',
+          'consultationTypeEtc',
+          'createdAt'
+        ]) &&
+        data.slotId == slotId &&
+        data.teacherId is string &&
+        data.studentNumber is string &&
+        data.studentName is string &&
+        data.grade is int &&
+        data.classNum is int &&
+        (!data.keys().hasAny(['schoolCode']) || data.schoolCode is string) &&
+        (!data.keys().hasAny(['schoolName']) || data.schoolName is string) &&
+        data.date is string &&
+        data.period is int &&
+        data.startTime is string &&
+        data.endTime is string &&
+        data.topic is string &&
+        data.content is string &&
+        (data.consultationType == 'face' ||
+          data.consultationType == 'phone' ||
+          data.consultationType == 'etc') &&
+        data.consultationTypeEtc is string &&
+        data.createdAt is int;
+    }
+
+    function validReservationCreate() {
+      let slotPath = /databases/$(database)/documents/availableSlots/$(request.resource.id);
+      return validReservationShape(request.resource.data, request.resource.id) &&
+        exists(slotPath) &&
+        get(slotPath).data.teacherId == request.resource.data.teacherId &&
+        get(slotPath).data.date == request.resource.data.date &&
+        get(slotPath).data.period == request.resource.data.period &&
+        get(slotPath).data.startTime == request.resource.data.startTime &&
+        get(slotPath).data.endTime == request.resource.data.endTime &&
+        get(slotPath).data.status == 'available';
+    }
+
+    function publicReservationLookupAllowed() {
+      return request.query.limit != null && request.query.limit <= 20;
+    }
+
+    function validSlotReservationTransition() {
+      let reservationPath = /databases/$(database)/documents/reservations/$(resource.id);
+      return request.resource.data.teacherId == resource.data.teacherId &&
+        request.resource.data.date == resource.data.date &&
+        request.resource.data.period == resource.data.period &&
+        request.resource.data.startTime == resource.data.startTime &&
+        request.resource.data.endTime == resource.data.endTime &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        (
+          (
+            resource.data.status == 'available' &&
+            request.resource.data.status == 'reserved' &&
+            existsAfter(reservationPath)
+          ) ||
+          (
+            resource.data.status == 'reserved' &&
+            request.resource.data.status == 'available' &&
+            !existsAfter(reservationPath)
+          )
+        );
+    }
+
+    match /users/{userId} {
+      allow get, list: if isAdmin() ||
+        isOwner(userId) ||
+        isPublicTeacherProfile(resource.data) ||
+        canTeacherAccessParentProfile(resource.data);
+
+      allow create: if isOwner(userId) && validTeacherProfileCreate(userId);
+
+      allow update: if isAdmin() ||
+        (isOwner(userId) && validOwnerUserUpdate()) ||
+        (isTeacherOrAdmin() && validTeacherManagedParentUpdate());
+
+      allow delete: if isAdmin() || isOwner(userId);
+    }
+
+    match /teachers/{teacherDocId} {
+      allow get, list: if isAdmin() ||
+        (isTeacherOrAdmin() && resource.data.id == request.auth.uid);
+
+      allow create: if isTeacherOrAdmin() && validTeacherDocCreate();
+      allow update: if isAdmin() || (isTeacherOrAdmin() && validTeacherDocUpdate());
+      allow delete: if isAdmin() ||
+        (isTeacherOrAdmin() && resource.data.id == request.auth.uid);
+    }
+
+    match /availableSlots/{slotId} {
+      allow get, list: if true;
+
+      allow create: if (isTeacherOrAdmin() && request.resource.data.teacherId == request.auth.uid) &&
+        validSlotShape(request.resource.data);
+
+      allow update: if (isAdmin() ||
+          (isTeacherOrAdmin() &&
+            resource.data.teacherId == request.auth.uid &&
+            validSlotShape(request.resource.data) &&
+            request.resource.data.teacherId == resource.data.teacherId)) ||
+        validSlotReservationTransition();
+
+      allow delete: if isAdmin() ||
+        (isTeacherOrAdmin() && resource.data.teacherId == request.auth.uid);
+    }
+
+    match /reservations/{reservationId} {
+      // NOTE:
+      // Public reservation lookup is still client-side in the current app.
+      // To tighten this further, move public lookup/cancel flows to a trusted server API.
+      allow list: if isAdmin() ||
+        (isTeacherOrAdmin() && resource.data.teacherId == request.auth.uid) ||
+        publicReservationLookupAllowed();
+
+      allow get: if isAdmin() ||
+        (isTeacherOrAdmin() && resource.data.teacherId == request.auth.uid);
+
+      allow create: if validReservationCreate();
+
+      allow update: if false;
+
+      allow delete: if isAdmin() ||
+        (isTeacherOrAdmin() && resource.data.teacherId == request.auth.uid) ||
+        (
+          getAfter(/databases/$(database)/documents/availableSlots/$(resource.data.slotId)).data.status == 'available'
+        );
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -43,3 +43,6 @@ next-env.d.ts
 # ide
 .vscode
 .idea
+
+# cafe article (local only)
+/cafe-article

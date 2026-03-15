@@ -32,6 +32,7 @@ export default function TeacherPage() {
   const [selectedPeriods, setSelectedPeriods] = useState<{ [date: string]: number[] }>({});
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [selectedSlotIds, setSelectedSlotIds] = useState<Set<string>>(new Set());
+  const [selectedReservationIds, setSelectedReservationIds] = useState<Set<string>>(new Set());
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -349,6 +350,69 @@ export default function TeacherPage() {
     });
   };
 
+  // 예약 개별 선택 토글
+  const toggleReservationSelection = (reservationId: string) => {
+    setSelectedReservationIds(prev => {
+      const next = new Set(prev);
+      if (next.has(reservationId)) {
+        next.delete(reservationId);
+      } else {
+        next.add(reservationId);
+      }
+      return next;
+    });
+  };
+
+  // 예약 전체 선택 토글
+  const toggleSelectAllReservations = () => {
+    const allIds = reservations.map(r => r.id);
+    if (allIds.length === 0) return;
+
+    const areAllSelected = allIds.every(id => selectedReservationIds.has(id));
+    if (areAllSelected) {
+      setSelectedReservationIds(new Set());
+    } else {
+      setSelectedReservationIds(new Set(allIds));
+    }
+  };
+
+  // 예약 벌크 취소
+  const handleBulkCancelReservations = () => {
+    const reservationsToCancel = reservations.filter(r => selectedReservationIds.has(r.id));
+
+    if (reservationsToCancel.length === 0) {
+      alert(t('selectToDelete'));
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: t('cancelReservationTitle'),
+      message: t('confirmBulkCancelReservations', { count: reservationsToCancel.length }),
+      confirmText: t('cancelReservation'),
+      cancelText: t('cancel'),
+      onConfirm: async () => {
+        try {
+          for (const reservation of reservationsToCancel) {
+            const reservationRef = doc(db, 'reservations', reservation.id);
+            const slotRef = doc(db, 'availableSlots', reservation.slotId);
+
+            await runTransaction(db, async (transaction) => {
+              transaction.delete(reservationRef);
+              transaction.update(slotRef, { status: 'available' });
+            });
+          }
+
+          setSelectedReservationIds(new Set());
+          alert(t('reservationsCanceled'));
+        } catch (error) {
+          console.error('Bulk cancel error:', error);
+          alert(t('bulkCancelError'));
+        }
+      },
+    });
+  };
+
   // Excel 내보내기
   const handleExportToExcel = () => {
     if (reservations.length === 0) {
@@ -575,13 +639,12 @@ export default function TeacherPage() {
                 return (
                   <div
                     key={slot.id}
-                    className={`flex items-center justify-between rounded-lg border p-3 ${
-                      slot.status === 'reserved'
+                    className={`flex items-center justify-between rounded-lg border p-3 ${slot.status === 'reserved'
                         ? 'border-gray-300 bg-gray-100'
                         : isSelected
                           ? 'border-blue-300 bg-blue-50'
                           : 'border-gray-200 bg-white'
-                    }`}
+                      }`}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       {slot.status === 'available' && (
@@ -630,32 +693,75 @@ export default function TeacherPage() {
         {/* 예약 현황 */}
         {reservations.length > 0 && (
           <div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold">{t('reservationStatus')} ({reservations.length}{t('reservationCount', { count: '' })})</h3>
-              <Button
-                onClick={handleExportToExcel}
-                variant="secondary"
-                size="sm"
-                className="mt-2 sm:mt-0"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                {t('exportExcel')}
-              </Button>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAllReservations}
+                    className="flex items-center gap-2 text-sm text-gray-600 transition-colors hover:text-gray-900"
+                  >
+                    {reservations.length > 0 && reservations.every(r => selectedReservationIds.has(r.id)) ? (
+                      <CheckSquare className="h-4 w-4 text-blue-600" />
+                    ) : (
+                      <Square className="h-4 w-4 text-gray-400" />
+                    )}
+                    {t('selectAllReservations')} ({selectedReservationIds.size}/{reservations.length})
+                  </button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    className="sm:min-w-[132px]"
+                    disabled={selectedReservationIds.size === 0}
+                    onClick={handleBulkCancelReservations}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {t('deleteSelected')}
+                  </Button>
+                </div>
+                <Button
+                  onClick={handleExportToExcel}
+                  variant="secondary"
+                  size="sm"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  {t('exportExcel')}
+                </Button>
+              </div>
             </div>
             <div className="space-y-4">
               {reservations.map((reservation) => {
+                const isReservationSelected = selectedReservationIds.has(reservation.id);
                 return (
                   <div
                     key={reservation.id}
-                    className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200"
+                    className={`p-4 rounded-lg border ${isReservationSelected
+                        ? 'border-blue-300 bg-blue-50'
+                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+                      }`}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900 mb-1">
-                          {formatReservationStudentLabel(reservation, language)}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {formatDateI18n(reservation.date, language)} {t('periodLabel', { number: reservation.period })}
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleReservationSelection(reservation.id)}
+                          className="shrink-0 mt-1 text-gray-400 transition-colors hover:text-blue-600"
+                        >
+                          {isReservationSelected ? (
+                            <CheckSquare className="h-5 w-5 text-blue-600" />
+                          ) : (
+                            <Square className="h-5 w-5" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900 mb-1">
+                            {formatReservationStudentLabel(reservation, language)}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {formatDateI18n(reservation.date, language)} {t('periodLabel', { number: reservation.period })}
+                          </div>
                         </div>
                       </div>
                       <Button
@@ -668,13 +774,13 @@ export default function TeacherPage() {
                         {t('cancel')}
                       </Button>
                     </div>
-                    <div className="text-sm text-gray-700 mb-1">
+                    <div className="text-sm text-gray-700 mb-1 sm:ml-8">
                       <span className="font-medium">{t('time')}:</span> {reservation.startTime} - {reservation.endTime}
                     </div>
-                    <div className="text-sm text-gray-700 mb-1">
+                    <div className="text-sm text-gray-700 mb-1 sm:ml-8">
                       <span className="font-medium">{t('topic')}:</span> {reservation.topic}
                     </div>
-                    <div className="text-sm text-gray-700 mb-1">
+                    <div className="text-sm text-gray-700 mb-1 sm:ml-8">
                       <span className="font-medium">{t('method')}:</span>{' '}
                       {reservation.consultationType === 'face'
                         ? t('faceToFace')
@@ -682,7 +788,7 @@ export default function TeacherPage() {
                           ? t('phoneCounseling')
                           : `${t('other')} (${reservation.consultationTypeEtc || ''})`}
                     </div>
-                    <div className="text-sm text-gray-700">
+                    <div className="text-sm text-gray-700 sm:ml-8">
                       <span className="font-medium">{t('content')}:</span> {reservation.content}
                     </div>
                   </div>

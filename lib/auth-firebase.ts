@@ -445,8 +445,9 @@ export async function updateUserGradeClass(
 
     const profile = profileSnap.data() as UserProfile;
     const currentSchoolYear = getCurrentSchoolYear();
+    const isNonHomeroom = grade === 0 && classNum === 0;
 
-    if (profile.role === 'teacher' || profile.role === 'admin') {
+    if ((profile.role === 'teacher' || profile.role === 'admin') && !isNonHomeroom) {
         const existingTeacherId = await matchTeacher(profile.schoolCode, grade, classNum);
         if (existingTeacherId && existingTeacherId !== uid) {
             throw new Error('DUPLICATE_TEACHER_CLASS');
@@ -474,10 +475,12 @@ export async function updateUserGradeClass(
         updatedAt: serverTimestamp(),
     });
 
-    try {
-        await syncMatchedParentsForTeacher(uid, profile.schoolCode, grade, classNum);
-    } catch (error) {
-        console.error('Failed to sync parent matches after grade/class update:', error);
+    if (!isNonHomeroom) {
+        try {
+            await syncMatchedParentsForTeacher(uid, profile.schoolCode, grade, classNum);
+        } catch (error) {
+            console.error('Failed to sync parent matches after grade/class update:', error);
+        }
     }
 
     return { matchedTeacherId: null };
@@ -560,6 +563,29 @@ export async function matchTeacher(
     if (snapshot.empty) return null;
 
     return (snapshot.docs[0].data() as { uid: string }).uid;
+}
+
+/** 학교코드 + 학년 + 반으로 교사 찾기 (이름 포함) */
+export async function matchTeacherWithName(
+    schoolCode: string,
+    grade: number,
+    classNum: number
+): Promise<{ teacherId: string; teacherName: string } | null> {
+    if (!schoolCode) return null;
+
+    const q = query(
+        collection(db, 'users'),
+        where('role', 'in', ['teacher', 'admin']),
+        where('schoolCode', '==', schoolCode),
+        where('grade', '==', grade),
+        where('classNum', '==', classNum)
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+
+    const data = snapshot.docs[0].data() as { uid: string; name?: string };
+    return { teacherId: data.uid, teacherName: data.name || '' };
 }
 
 /** 교사에 매칭된 학부모 목록 조회 */

@@ -44,9 +44,11 @@ export default function UserProfileModal({
     const [statusMessage, setStatusMessage] = useState('');
     const [grade, setGrade] = useState(profile.grade);
     const [classNum, setClassNum] = useState(profile.classNum);
+    const [isNonHomeroom, setIsNonHomeroom] = useState(profile.grade === 0 && profile.classNum === 0);
     const { t, language } = useLanguage();
     const supportsGradeClassEdit =
         profile.role === 'teacher' || profile.role === 'parent' || profile.role === 'admin';
+    const isTeacherOrAdmin = profile.role === 'teacher' || profile.role === 'admin';
     const isForcedGradeClassUpdate = forceGradeClassUpdate && supportsGradeClassEdit;
 
     useEffect(() => {
@@ -61,6 +63,7 @@ export default function UserProfileModal({
         setStatusMessage('');
         setGrade(profile.grade);
         setClassNum(profile.classNum);
+        setIsNonHomeroom(profile.grade === 0 && profile.classNum === 0);
     }, [isOpen, isForcedGradeClassUpdate, profile.grade, profile.classNum]);
 
     if (!isOpen) {
@@ -111,6 +114,7 @@ export default function UserProfileModal({
     const handleEditClick = () => {
         setGrade(profile.grade);
         setClassNum(profile.classNum);
+        setIsNonHomeroom(profile.grade === 0 && profile.classNum === 0);
         setError('');
         setStatusMessage('');
         setStep('edit');
@@ -120,8 +124,11 @@ export default function UserProfileModal({
         setSaving(true);
         setError('');
 
+        const saveGrade = isNonHomeroom ? 0 : grade;
+        const saveClassNum = isNonHomeroom ? 0 : classNum;
+
         try {
-            const result = await updateUserGradeClass(profile.uid, grade, classNum);
+            const result = await updateUserGradeClass(profile.uid, saveGrade, saveClassNum);
             await onProfileUpdated();
 
             if (isForcedGradeClassUpdate) {
@@ -215,19 +222,21 @@ export default function UserProfileModal({
                                     {profile.role === 'teacher'
                                         ? t('teacher')
                                         : profile.role === 'admin'
-                                          ? t('admin')
-                                          : t('parent')}
+                                            ? t('admin')
+                                            : t('parent')}
                                 </p>
                             </div>
                             {profile.schoolName && (
                                 <div>
                                     <span className="text-xs uppercase tracking-wider text-white/40">{t('school')}</span>
                                     <p className="mt-1 font-medium text-white">
-                                        {t('schoolInfo', {
-                                            school: profile.schoolName,
-                                            grade: profile.grade,
-                                            class: profile.classNum,
-                                        })}
+                                        {profile.grade === 0 && profile.classNum === 0
+                                            ? t('nonHomeroom')
+                                            : t('schoolInfo', {
+                                                school: profile.schoolName,
+                                                grade: profile.grade,
+                                                class: profile.classNum,
+                                            })}
                                     </p>
                                 </div>
                             )}
@@ -281,12 +290,40 @@ export default function UserProfileModal({
                                 <span className="text-xs uppercase tracking-wider text-white/40">{t('school')}</span>
                                 <p className="mt-1 font-medium text-white">{profile.schoolName}</p>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            {isTeacherOrAdmin && (
+                                <div className="flex items-center gap-3">
+                                    <label className="flex cursor-pointer items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={isNonHomeroom}
+                                            onChange={(e) => {
+                                                setIsNonHomeroom(e.target.checked);
+                                                if (e.target.checked) {
+                                                    setGrade(0);
+                                                    setClassNum(0);
+                                                } else {
+                                                    setGrade(profile.grade || 1);
+                                                    setClassNum(profile.classNum || 1);
+                                                }
+                                            }}
+                                            className="h-4 w-4 rounded border-white/30 bg-white/10 text-cyan-500 focus:ring-cyan-400/30"
+                                        />
+                                        <span className="text-sm font-medium text-white/80">{t('nonHomeroom')}</span>
+                                    </label>
+                                </div>
+                            )}
+                            {isNonHomeroom && isTeacherOrAdmin && (
+                                <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                                    {t('nonHomeroomHint')}
+                                </div>
+                            )}
+                            <div className={`grid grid-cols-2 gap-3 ${isNonHomeroom ? 'pointer-events-none opacity-40' : ''}`}>
                                 <div>
                                     <label className="mb-1.5 block text-sm font-medium text-white/70">{t('grade')}</label>
                                     <select
-                                        value={grade}
+                                        value={isNonHomeroom ? 0 : grade}
                                         onChange={(event) => setGrade(Number(event.target.value))}
+                                        disabled={isNonHomeroom}
                                         className="w-full cursor-pointer appearance-none rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white transition-all focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30"
                                     >
                                         {[1, 2, 3, 4, 5, 6].map((gradeOption) => (
@@ -303,13 +340,14 @@ export default function UserProfileModal({
                                 </div>
                                 <div>
                                     <label className="mb-1.5 block text-sm font-medium text-white/70">
-                                        {profile.role === 'teacher' || profile.role === 'admin'
+                                        {isTeacherOrAdmin
                                             ? t('homeroom')
                                             : t('classNum')}
                                     </label>
                                     <select
-                                        value={classNum}
+                                        value={isNonHomeroom ? 0 : classNum}
                                         onChange={(event) => setClassNum(Number(event.target.value))}
+                                        disabled={isNonHomeroom}
                                         className="w-full cursor-pointer appearance-none rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white transition-all focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30"
                                     >
                                         {Array.from({ length: 15 }, (_, index) => index + 1).map((classOption) => (

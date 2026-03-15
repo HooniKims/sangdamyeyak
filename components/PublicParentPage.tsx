@@ -22,7 +22,7 @@ import { SchoolInfo } from '@/types/auth';
 import { formatDate, formatDateI18n } from '@/lib/utils';
 import { db } from '@/lib/firebase';
 import { useLanguage } from '@/lib/i18n';
-import { matchTeacher } from '@/lib/auth-firebase';
+import { matchTeacherWithName } from '@/lib/auth-firebase';
 import {
   formatReservationStudentLabel,
   formatStudentLookupLabel,
@@ -65,11 +65,10 @@ export default function PublicParentPage() {
           <button
             type="button"
             onClick={() => setActiveTab('book')}
-            className={`flex-1 rounded-md px-6 py-3 font-medium transition-all ${
-              activeTab === 'book'
+            className={`flex-1 rounded-md px-6 py-3 font-medium transition-all ${activeTab === 'book'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             <CalendarPlus className="mr-2 inline-block h-5 w-5" />
             {t('bookReservation')}
@@ -77,11 +76,10 @@ export default function PublicParentPage() {
           <button
             type="button"
             onClick={() => setActiveTab('check')}
-            className={`flex-1 rounded-md px-6 py-3 font-medium transition-all ${
-              activeTab === 'check'
+            className={`flex-1 rounded-md px-6 py-3 font-medium transition-all ${activeTab === 'check'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             <Search className="mr-2 inline-block h-5 w-5" />
             {t('checkCancel')}
@@ -111,12 +109,13 @@ function BookingTab() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [matchingTeacher, setMatchingTeacher] = useState(false);
   const [teacherId, setTeacherId] = useState('');
+  const [teacherName, setTeacherName] = useState('');
   const [matchError, setMatchError] = useState('');
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
     cancelText: null as string | null,
   });
 
@@ -194,10 +193,11 @@ function BookingTab() {
     setMatchError('');
 
     try {
-      const matchedTeacherId = await matchTeacher(schoolCode, grade, classNum);
+      const result = await matchTeacherWithName(schoolCode, grade, classNum);
 
-      if (!matchedTeacherId) {
+      if (!result) {
         setTeacherId('');
+        setTeacherName('');
         setAvailableSlots([]);
         setSelectedSlot(null);
         setStep(1);
@@ -205,7 +205,8 @@ function BookingTab() {
         return;
       }
 
-      setTeacherId(matchedTeacherId);
+      setTeacherId(result.teacherId);
+      setTeacherName(result.teacherName);
       setSelectedSlot(null);
       setStudentName('');
       setStep(2);
@@ -405,6 +406,11 @@ function BookingTab() {
           <div className="mb-4 flex items-center justify-between">
             <div className="text-sm font-medium text-gray-600">
               {getClassSummary(schoolName, grade, classNum, t('gradeUnit'), t('classUnit'))}
+              {teacherName && (
+                <span className="ml-2 text-blue-600">
+                  ({language === 'ko' ? '담임' : 'Teacher'}: {teacherName})
+                </span>
+              )}
             </div>
             <Button onClick={() => setStep(1)} variant="ghost" size="sm">
               {t('editInfo')}
@@ -436,13 +442,12 @@ function BookingTab() {
                   type="button"
                   onClick={() => handleSlotSelect(slot)}
                   disabled={isReserved}
-                  className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-all ${
-                    isReserved
+                  className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-all ${isReserved
                       ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
                       : isSelected
                         ? 'border-blue-600 bg-blue-50 shadow-sm'
                         : 'border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50'
-                  }`}
+                    }`}
                 >
                   <div>
                     <div className={`font-medium ${isReserved ? 'text-gray-500' : 'text-gray-900'}`}>
@@ -478,16 +483,14 @@ function BookingTab() {
 
       {selectedSlot && (
         <div
-          className={`mb-6 flex items-start gap-3 rounded-lg border p-4 ${
-            selectedSlot.status === 'available'
+          className={`mb-6 flex items-start gap-3 rounded-lg border p-4 ${selectedSlot.status === 'available'
               ? 'border-blue-200 bg-blue-50'
               : 'border-amber-200 bg-amber-50'
-          }`}
+            }`}
         >
           <Clock
-            className={`mt-0.5 h-5 w-5 ${
-              selectedSlot.status === 'available' ? 'text-blue-600' : 'text-amber-600'
-            }`}
+            className={`mt-0.5 h-5 w-5 ${selectedSlot.status === 'available' ? 'text-blue-600' : 'text-amber-600'
+              }`}
           />
           <div>
             <div className="mb-1 font-medium text-gray-900">
@@ -532,11 +535,10 @@ function BookingTab() {
                 key={item}
                 type="button"
                 onClick={() => setTopic(item)}
-                className={`rounded-lg border px-3 py-2 text-sm ${
-                  topic === item
+                className={`rounded-lg border px-3 py-2 text-sm ${topic === item
                     ? 'border-blue-600 bg-blue-600 text-white'
                     : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400'
-                }`}
+                  }`}
               >
                 {t(item)}
               </button>
@@ -673,7 +675,7 @@ function CheckTab() {
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
     cancelText: null as string | null,
   });
 

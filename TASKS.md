@@ -44,9 +44,8 @@
 - [x] `npm run lint` 통과 (2026-03-15)
 - [ ] `npx tsc --noEmit` 실패 (2026-03-15)
   - [ ] `app/signup/page.tsx`에서 제거된 학부모 가입 상태 `studentName`, `setStudentName` 참조가 남아 있음
-- [ ] `npm run build` 재검증 필요 (2026-03-15)
-  - [ ] 현재 Windows 파일 잠금으로 `.next/server/server-reference-manifest.json` rename 단계에서 `EPERM` 발생
-  - [ ] 타입 오류 수정 후 빌드 재실행 필요
+- [x] `npm run build` 재검증 완료 (2026-03-15)
+  - [x] `npm install` 및 `next build` 성공 확인 (exit code 0)
 
 ## 완료된 작업
 - [x] 깃허브 레포지토리 복제 (schoolalarm, counseling-reservation)
@@ -202,3 +201,9 @@
   - [x] 강제 학년/반 확인 팝업은 2027년 3월 1일부터만 표시되도록 제한
 - [x] 최신 변경 사항 깃허브 업로드 (`main` 브랜치) - 2026-03-14
 - [x] `schoolholic` 깃허브 저장소 내용을 `sangdamyeyak` 폴더로 직접 복제 완료
+- [x] 로그인 실패 원인 분석 및 해결 (Netlify 환경변수 `NEXT_PUBLIC_FIREBASE_PROJECT_ID` 오타 수정 가이드 제공)
+- [x] 교용 예약 현황 일괄 취소 기능 추가
+  - [x] 예약 현황 섹션에 전체 선택 및 다중 선택 UI 추가
+  - [x] `runTransaction`을 이용한 예약 삭제 및 슬롯 상태(`available`) 복구 로직 구현
+  - [x] 일괄 취소 확인 문구 i18n(한/영) 반영 및 `npm run build` 검증 완료
+- [x] 최신 변경 사항 깃허브 업로드 (`main` 브랜치) - 2026-03-15

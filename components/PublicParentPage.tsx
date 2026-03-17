@@ -169,8 +169,7 @@ function BookingTab() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [matchError, setMatchError] = useState('');
-  const [nonHomeroomTeachers, setNonHomeroomTeachers] = useState<NonHomeroomTeacherOption[]>([]);
-  const [selectedNonHomeroomTeacherId, setSelectedNonHomeroomTeacherId] = useState('');
+  const [targetTeacherNameInput, setTargetTeacherNameInput] = useState('');
   const [preferredDate, setPreferredDate] = useState('');
   const [preferredTime, setPreferredTime] = useState('');
   const [nonHomeroomContent, setNonHomeroomContent] = useState('');
@@ -198,8 +197,7 @@ function BookingTab() {
     setTeacherName('');
     setSelectedSlot(null);
     setAvailableSlots([]);
-    setNonHomeroomTeachers([]);
-    setSelectedNonHomeroomTeacherId('');
+    setTargetTeacherNameInput('');
     setPreferredDate('');
     setPreferredTime('');
     setStudentName('');
@@ -315,17 +313,7 @@ function BookingTab() {
         return;
       }
 
-      const teachers = await getNonHomeroomTeachersBySchool(schoolCode);
-
-      if (teachers.length === 0) {
-        setNonHomeroomTeachers([]);
-        setSelectedNonHomeroomTeacherId('');
-        setMatchError(getNoNonHomeroomTeacherMessage(language));
-        return;
-      }
-
-      setNonHomeroomTeachers(teachers);
-      setSelectedNonHomeroomTeacherId(teachers[0].teacherId);
+      setTargetTeacherNameInput('');
       setPreferredDate('');
       setPreferredTime('');
       setNonHomeroomContent('');
@@ -459,17 +447,15 @@ function BookingTab() {
     }
 
     const trimmedStudentName = studentName.trim();
+    const trimmedTargetTeacherName = targetTeacherNameInput.trim();
     const trimmedContent = nonHomeroomContent.trim();
-    const selectedTeacher = nonHomeroomTeachers.find(
-      teacher => teacher.teacherId === selectedNonHomeroomTeacherId,
-    );
 
     if (!trimmedStudentName) {
       alert(t('enterStudentName'));
       return;
     }
 
-    if (!selectedTeacher) {
+    if (!trimmedTargetTeacherName) {
       alert(t('selectDesiredTeacher'));
       return;
     }
@@ -494,9 +480,11 @@ function BookingTab() {
     try {
       const homeroomTeacherId = await matchTeacher(schoolCode, grade, classNum);
 
+      const computedTargetTeacherId = `direct_input_${Date.now()}`;
+
       await addDoc(collection(db, 'nonHomeroomRequests'), {
-        targetTeacherId: selectedTeacher.teacherId,
-        targetTeacherName: selectedTeacher.teacherName,
+        targetTeacherId: computedTargetTeacherId,
+        targetTeacherName: trimmedTargetTeacherName,
         homeroomTeacherId,
         schoolCode,
         schoolName,
@@ -535,10 +523,6 @@ function BookingTab() {
       setSubmitting(false);
     }
   };
-
-  const selectedNonHomeroomTeacher = nonHomeroomTeachers.find(
-    teacher => teacher.teacherId === selectedNonHomeroomTeacherId,
-  );
 
   if (step === 1) {
     return (
@@ -953,17 +937,14 @@ function BookingTab() {
               <Users className="mr-2 h-4 w-4" />
               {t('desiredTeacher')}
             </label>
-            <select
-              value={selectedNonHomeroomTeacherId}
-              onChange={e => setSelectedNonHomeroomTeacherId(e.target.value)}
+            <input
+              type="text"
+              value={targetTeacherNameInput}
+              onChange={e => setTargetTeacherNameInput(e.target.value)}
+              placeholder="예: 홍길동 선생님 (과학)"
               className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500"
-            >
-              {nonHomeroomTeachers.map(teacher => (
-                <option key={teacher.teacherId} value={teacher.teacherId}>
-                  {teacher.teacherName}
-                </option>
-              ))}
-            </select>
+              required
+            />
           </div>
         </div>
 
@@ -997,7 +978,7 @@ function BookingTab() {
 
             <div className="rounded-2xl border border-gray-200 bg-slate-50 p-4 text-sm text-gray-600">
               <div className="mb-2 font-semibold text-gray-900">{t('requestSummary')}</div>
-              <div>{selectedNonHomeroomTeacher?.teacherName || '-'}</div>
+              <div>{targetTeacherNameInput || '-'}</div>
               <div className="mt-1">
                 {formatPreferredDateTime(preferredDate, preferredTime, language) || t('selectPreferredDateTime')}
               </div>

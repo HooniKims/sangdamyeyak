@@ -475,6 +475,11 @@ function BookingTab() {
       return;
     }
 
+    if (consultationType === 'etc' && !consultationTypeEtc.trim()) {
+      alert(t('enterOtherMethod'));
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -502,6 +507,8 @@ function BookingTab() {
           preferredTime,
           preferredDateTime: `${preferredDate}T${preferredTime}`,
           content: trimmedContent,
+          consultationType,
+          consultationTypeEtc: consultationType === 'etc' ? consultationTypeEtc.trim() : '',
           createdAt: Date.now(),
         });
       } catch (err) {
@@ -995,6 +1002,60 @@ function BookingTab() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            {t('counselingMethod')}
+          </label>
+          <div className="flex flex-wrap gap-4 mb-6">
+            <label className="flex cursor-pointer items-center space-x-2">
+              <input
+                type="radio"
+                name="nonHomeroomConsultationType"
+                value="face"
+                checked={consultationType === 'face'}
+                onChange={e => setConsultationType(e.target.value as 'face')}
+                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-gray-700">{t('faceToFace')}</span>
+            </label>
+            <label className="flex cursor-pointer items-center space-x-2">
+              <input
+                type="radio"
+                name="nonHomeroomConsultationType"
+                value="phone"
+                checked={consultationType === 'phone'}
+                onChange={e => setConsultationType(e.target.value as 'phone')}
+                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-gray-700">{t('phoneCounseling')}</span>
+            </label>
+            <label className="flex cursor-pointer items-center space-x-2">
+              <input
+                type="radio"
+                name="nonHomeroomConsultationType"
+                value="etc"
+                checked={consultationType === 'etc'}
+                onChange={e => setConsultationType(e.target.value as 'etc')}
+                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-gray-700">{t('other')}</span>
+            </label>
+          </div>
+
+          {consultationType === 'etc' && (
+            <div className="mb-6 -mt-4">
+              <input
+                type="text"
+                value={consultationTypeEtc}
+                onChange={e => setConsultationTypeEtc(e.target.value)}
+                placeholder={t('otherMethodPlaceholder')}
+                className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+          )}
         </div>
 
         <div>

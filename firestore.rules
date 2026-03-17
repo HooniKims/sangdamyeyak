@@ -220,6 +220,8 @@ service cloud.firestore {
           'preferredTime',
           'preferredDateTime',
           'content',
+          'consultationType',
+          'consultationTypeEtc',
           'createdAt'
         ]) &&
         data.targetTeacherId is string &&
@@ -227,14 +229,16 @@ service cloud.firestore {
         validNullableString(data.homeroomTeacherId) &&
         data.schoolCode is string &&
         data.schoolName is string &&
-        data.grade is int &&
-        data.classNum is int &&
+        data.grade is number &&
+        data.classNum is number &&
         data.studentName is string &&
         data.preferredDate is string &&
         data.preferredTime is string &&
         data.preferredDateTime is string &&
         data.content is string &&
-        data.createdAt is int;
+        (data.consultationType == 'face' || data.consultationType == 'phone' || data.consultationType == 'etc') &&
+        data.consultationTypeEtc is string &&
+        data.createdAt is number;
     }
 
     function validTeacherManagedNonHomeroomRequestUpdate() {

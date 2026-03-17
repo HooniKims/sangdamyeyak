@@ -478,25 +478,36 @@ function BookingTab() {
     setSubmitting(true);
 
     try {
-      const homeroomTeacherId = await matchTeacher(schoolCode, grade, classNum);
+      let homeroomTeacherId: string | null = null;
+      try {
+        homeroomTeacherId = await matchTeacher(schoolCode, grade, classNum);
+      } catch (err) {
+        console.error('matchTeacher Error:', err);
+        throw err;
+      }
 
       const computedTargetTeacherId = `direct_input_${Date.now()}`;
 
-      await addDoc(collection(db, 'nonHomeroomRequests'), {
-        targetTeacherId: computedTargetTeacherId,
-        targetTeacherName: trimmedTargetTeacherName,
-        homeroomTeacherId,
-        schoolCode,
-        schoolName,
-        grade,
-        classNum,
-        studentName: trimmedStudentName,
-        preferredDate,
-        preferredTime,
-        preferredDateTime: `${preferredDate}T${preferredTime}`,
-        content: trimmedContent,
-        createdAt: Date.now(),
-      });
+      try {
+        await addDoc(collection(db, 'nonHomeroomRequests'), {
+          targetTeacherId: computedTargetTeacherId,
+          targetTeacherName: trimmedTargetTeacherName,
+          homeroomTeacherId: homeroomTeacherId ?? null,
+          schoolCode,
+          schoolName,
+          grade,
+          classNum,
+          studentName: trimmedStudentName,
+          preferredDate,
+          preferredTime,
+          preferredDateTime: `${preferredDate}T${preferredTime}`,
+          content: trimmedContent,
+          createdAt: Date.now(),
+        });
+      } catch (err) {
+        console.error('addDoc Error:', err);
+        throw err;
+      }
 
       setConfirmModal({
         isOpen: true,

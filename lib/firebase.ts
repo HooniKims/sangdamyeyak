@@ -11,19 +11,19 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const requiredFirebaseConfigKeys = [
-  'NEXT_PUBLIC_FIREBASE_API_KEY',
-  'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
-  'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
-  'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
-  'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
-  'NEXT_PUBLIC_FIREBASE_APP_ID',
-] as const;
-
-const missingFirebaseConfigKeys = requiredFirebaseConfigKeys.filter((key) => {
-  const value = process.env[key];
-  return typeof value !== 'string' || value.trim() === '';
-});
+const missingFirebaseConfigKeys = Object.entries(firebaseConfig)
+  .filter(([_, value]) => typeof value !== 'string' || value.trim() === '')
+  .map(([key]) => {
+    const keyMap: Record<string, string> = {
+      apiKey: 'NEXT_PUBLIC_FIREBASE_API_KEY',
+      authDomain: 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+      projectId: 'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+      storageBucket: 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      messagingSenderId: 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+      appId: 'NEXT_PUBLIC_FIREBASE_APP_ID',
+    };
+    return keyMap[key] || key;
+  });
 
 let app: FirebaseApp | null = null;
 let db: Firestore;

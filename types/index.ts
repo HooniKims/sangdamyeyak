@@ -60,6 +60,8 @@ export interface NonHomeroomRequest {
   preferredTime: string;
   preferredDateTime: string;
   content: string;
+  consultationType?: 'face' | 'phone' | 'etc';
+  consultationTypeEtc?: string;
   createdAt: number;
 }
 

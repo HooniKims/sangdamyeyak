@@ -25,20 +25,62 @@ function NonHomeroomRequestTable({
   requests,
   language,
   t,
+  onDelete,
 }: {
   title: string;
   description?: string;
   requests: NonHomeroomRequest[];
   language: 'ko' | 'en';
   t: (key: string, params?: Record<string, string | number>) => string;
+  onDelete?: (ids: string[]) => void;
 }) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleOne = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === requests.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(requests.map(r => r.id)));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (onDelete && selectedIds.size > 0) {
+      onDelete(Array.from(selectedIds));
+      setSelectedIds(new Set());
+    }
+  };
+
+  const isAllSelected = requests.length > 0 && selectedIds.size === requests.length;
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white">
       <div className="border-b border-gray-100 px-5 py-4">
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-          <Users className="h-5 w-5 text-emerald-600" />
-          {title}
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+            <Users className="h-5 w-5 text-emerald-600" />
+            {title}
+          </h3>
+          {onDelete && selectedIds.size > 0 && (
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t('deleteSelected')} ({selectedIds.size})
+            </Button>
+          )}
+        </div>
         {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
       </div>
 
@@ -51,29 +93,78 @@ function NonHomeroomRequestTable({
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
+                {onDelete && (
+                  <th className="px-4 py-3">
+                    <button type="button" onClick={toggleAll} className="text-gray-400 hover:text-blue-600">
+                      {isAllSelected ? (
+                        <CheckSquare className="h-4 w-4 text-blue-600" />
+                      ) : (
+                        <Square className="h-4 w-4" />
+                      )}
+                    </button>
+                  </th>
+                )}
                 <th className="px-4 py-3 font-medium">{t('desiredDateTime')}</th>
                 <th className="px-4 py-3 font-medium">{t('desiredTeacher')}</th>
                 <th className="px-4 py-3 font-medium">{t('grade')}</th>
                 <th className="px-4 py-3 font-medium">{t('classNum')}</th>
                 <th className="px-4 py-3 font-medium">{t('studentNameField')}</th>
+                <th className="px-4 py-3 font-medium">{t('method')}</th>
                 <th className="px-4 py-3 font-medium">{t('content')}</th>
+                {onDelete && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody>
-              {requests.map((request) => (
-                <tr key={request.id} className="border-t border-gray-100 align-top">
-                  <td className="px-4 py-3 text-gray-700">
-                    {formatDateI18n(request.preferredDate, language)} {request.preferredTime}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{request.targetTeacherName}</td>
-                  <td className="px-4 py-3 text-gray-700">{request.grade}</td>
-                  <td className="px-4 py-3 text-gray-700">{request.classNum}</td>
-                  <td className="px-4 py-3 text-gray-900">{request.studentName}</td>
-                  <td className="min-w-[280px] px-4 py-3 whitespace-pre-wrap text-gray-700">
-                    {request.content}
-                  </td>
-                </tr>
-              ))}
+              {requests.map((request) => {
+                const isSelected = selectedIds.has(request.id);
+                let methodLabel = '';
+                if (request.consultationType === 'face') methodLabel = t('faceToFace');
+                else if (request.consultationType === 'phone') methodLabel = t('phoneCounseling');
+                else if (request.consultationType === 'etc') methodLabel = `${t('other')}${request.consultationTypeEtc ? ` (${request.consultationTypeEtc})` : ''}`;
+                return (
+                  <tr
+                    key={request.id}
+                    className={`border-t border-gray-100 align-top ${
+                      isSelected ? 'bg-blue-50' : ''
+                    }`}
+                  >
+                    {onDelete && (
+                      <td className="px-4 py-3">
+                        <button type="button" onClick={() => toggleOne(request.id)} className="text-gray-400 hover:text-blue-600">
+                          {isSelected ? (
+                            <CheckSquare className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </button>
+                      </td>
+                    )}
+                    <td className="px-4 py-3 text-gray-700">
+                      {formatDateI18n(request.preferredDate, language)} {request.preferredTime}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{request.targetTeacherName}</td>
+                    <td className="px-4 py-3 text-gray-700">{request.grade}</td>
+                    <td className="px-4 py-3 text-gray-700">{request.classNum}</td>
+                    <td className="px-4 py-3 text-gray-900">{request.studentName}</td>
+                    <td className="px-4 py-3 text-gray-600">{methodLabel}</td>
+                    <td className="min-w-[220px] px-4 py-3 whitespace-pre-wrap text-gray-700">
+                      {request.content}
+                    </td>
+                    {onDelete && (
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => onDelete([request.id])}
+                          className="text-gray-400 hover:text-red-500 transition-colors"
+                          title={t('delete')}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -203,7 +294,7 @@ export default function TeacherPage() {
 
     const requestsQuery = query(
       collection(db, 'nonHomeroomRequests'),
-      where('targetTeacherId', '==', teacherId)
+      where('schoolCode', '==', profile?.schoolCode)
     );
 
     const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
@@ -232,7 +323,7 @@ export default function TeacherPage() {
 
     const requestsQuery = query(
       collection(db, 'nonHomeroomRequests'),
-      where('homeroomTeacherId', '==', teacherId)
+      where('schoolCode', '==', profile?.schoolCode)
     );
 
     const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
@@ -542,6 +633,27 @@ export default function TeacherPage() {
     });
   };
 
+  // 비담임 상담 신청 삭제
+  const handleDeleteNonHomeroomRequests = async (ids: string[]) => {
+    setConfirmModal({
+      isOpen: true,
+      title: t('deleteSlotTitle'),
+      message: t('confirmBulkDeleteSlots', { count: ids.length }),
+      confirmText: t('delete'),
+      cancelText: t('cancel'),
+      onConfirm: async () => {
+        try {
+          for (const id of ids) {
+            await deleteDoc(doc(db, 'nonHomeroomRequests', id));
+          }
+        } catch (error) {
+          console.error('비담임 신청 삭제 오류:', error);
+          alert(t('deleteError'));
+        }
+      },
+    });
+  };
+
   // Excel 내보내기
   const handleExportToExcel = () => {
     if (reservations.length === 0) {
@@ -649,6 +761,7 @@ export default function TeacherPage() {
               requests={directNonHomeroomRequests}
               language={language}
               t={t}
+              onDelete={handleDeleteNonHomeroomRequests}
             />
           </div>
         ) : (
@@ -945,11 +1058,12 @@ export default function TeacherPage() {
 
             <div className="mb-8">
               <NonHomeroomRequestTable
-                title={t('classNonHomeroomRequests')}
-                description={t('classNonHomeroomRequestsDesc')}
+                title={t('nonHomeroomRequests')}
+                description={t('nonHomeroomRequestsDesc')}
                 requests={classNonHomeroomRequests}
                 language={language}
                 t={t}
+                onDelete={handleDeleteNonHomeroomRequests}
               />
             </div>
 

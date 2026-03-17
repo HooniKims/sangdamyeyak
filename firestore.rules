@@ -352,19 +352,12 @@ service cloud.firestore {
 
     match /nonHomeroomRequests/{requestId} {
       allow list: if isAdmin() ||
-        (isTeacherOrAdmin() &&
-          (
-            resource.data.targetTeacherId == request.auth.uid ||
-            resource.data.homeroomTeacherId == request.auth.uid
-          )) ||
+        (isTeacherOrAdmin() && resource.data.schoolCode == currentUserSchoolCode()) ||
         publicReservationLookupAllowed();
 
       allow get: if isAdmin() ||
-        (isTeacherOrAdmin() &&
-          (
-            resource.data.targetTeacherId == request.auth.uid ||
-            resource.data.homeroomTeacherId == request.auth.uid
-          ));
+        (isTeacherOrAdmin() && resource.data.schoolCode == currentUserSchoolCode()) ||
+        publicReservationLookupAllowed();
 
       allow create: if validNonHomeroomRequestShape(request.resource.data);
 
@@ -372,12 +365,7 @@ service cloud.firestore {
         (isTeacherOrAdmin() && validTeacherManagedNonHomeroomRequestUpdate());
 
       allow delete: if isAdmin() ||
-        (isTeacherOrAdmin() &&
-          (
-            resource.data.targetTeacherId == request.auth.uid ||
-            resource.data.homeroomTeacherId == request.auth.uid
-          )) ||
-        !isSignedIn();
+        (isTeacherOrAdmin() && resource.data.schoolCode == currentUserSchoolCode());
     }
 
     match /{document=**} {

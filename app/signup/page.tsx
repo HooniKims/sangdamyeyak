@@ -121,7 +121,7 @@ function SignUpForm() {
                 );
             } else if (
                 firebaseError.name === 'FIREBASE_NOT_CONFIGURED' ||
-                firebaseError.message?.includes('Firebase')
+                firebaseError.message?.includes('Missing Firebase env vars')
             ) {
                 setError(t('firebaseConfigMissing'));
             } else if (firebaseError.code === 'auth/email-already-in-use') {

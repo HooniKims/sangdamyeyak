@@ -30,6 +30,7 @@ function SignUpForm() {
     const [schoolCode, setSchoolCode] = useState('');
     const [grade, setGrade] = useState(1);
     const [classNum, setClassNum] = useState(1);
+    const [isNonHomeroom, setIsNonHomeroom] = useState(false);
 
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -72,7 +73,12 @@ function SignUpForm() {
         setLoading(true);
 
         try {
-            const isDuplicate = await checkTeacherDuplicate(schoolCode, grade, classNum);
+            const saveGrade = isNonHomeroom ? 0 : grade;
+            const saveClassNum = isNonHomeroom ? 0 : classNum;
+            const isDuplicate =
+                !isNonHomeroom &&
+                (await checkTeacherDuplicate(schoolCode, saveGrade, saveClassNum));
+
             if (isDuplicate) {
                 setError(t('duplicateTeacher'));
                 setLoading(false);
@@ -100,19 +106,24 @@ function SignUpForm() {
                 name: name.trim(),
                 schoolName,
                 schoolCode,
-                grade,
-                classNum,
+                grade: saveGrade,
+                classNum: saveClassNum,
             });
 
             router.push('/');
         } catch (err: unknown) {
-            const firebaseError = err as { code?: string; message?: string };
+            const firebaseError = err as { code?: string; message?: string; name?: string };
             if (firebaseError.message === 'PARENT_LOGIN_REMOVED') {
                 setError(
                     language === 'ko'
                         ? '학부모 로그인은 종료되었습니다. 학부모용 페이지를 이용해 주세요.'
                         : 'Parent login has been removed. Please use the parent page instead.',
                 );
+            } else if (
+                firebaseError.name === 'FIREBASE_NOT_CONFIGURED' ||
+                firebaseError.message?.includes('Firebase')
+            ) {
+                setError(t('firebaseConfigMissing'));
             } else if (firebaseError.code === 'auth/email-already-in-use') {
                 setError(t('emailAlreadyInUse'));
             } else if (firebaseError.code === 'auth/weak-password') {
@@ -250,12 +261,36 @@ function SignUpForm() {
                             <SchoolSearch value={schoolName} onSelect={handleSchoolSelect} />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                            <label className="flex cursor-pointer items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={isNonHomeroom}
+                                    onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setIsNonHomeroom(checked);
+
+                                        if (!checked) {
+                                            setGrade((current) => (current === 0 ? 1 : current));
+                                            setClassNum((current) => (current === 0 ? 1 : current));
+                                        }
+                                    }}
+                                    className="h-4 w-4 rounded border-white/30 bg-white/10 text-cyan-500 focus:ring-cyan-400/30"
+                                />
+                                <div>
+                                    <p className="text-sm font-medium text-white">{t('nonHomeroom')}</p>
+                                    <p className="text-xs text-white/55">{t('signupNonHomeroomHint')}</p>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div className={`grid grid-cols-2 gap-3 ${isNonHomeroom ? 'pointer-events-none opacity-45' : ''}`}>
                             <div>
                                 <label className="block text-sm font-medium text-white/70 mb-1.5">{t('grade')}</label>
                                 <select
                                     value={grade}
                                     onChange={(e) => setGrade(Number(e.target.value))}
+                                    disabled={isNonHomeroom}
                                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all appearance-none cursor-pointer"
                                 >
                                     {[1, 2, 3, 4, 5, 6].map((g) => (
@@ -270,6 +305,7 @@ function SignUpForm() {
                                 <select
                                     value={classNum}
                                     onChange={(e) => setClassNum(Number(e.target.value))}
+                                    disabled={isNonHomeroom}
                                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 transition-all appearance-none cursor-pointer"
                                 >
                                     {Array.from({ length: 15 }, (_, i) => i + 1).map((c) => (
@@ -280,6 +316,12 @@ function SignUpForm() {
                                 </select>
                             </div>
                         </div>
+
+                        {isNonHomeroom && (
+                            <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                                {t('nonHomeroomSignupNoSlotHint')}
+                            </div>
+                        )}
 
                         <button
                             type="submit"

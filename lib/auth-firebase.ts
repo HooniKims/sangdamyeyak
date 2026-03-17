@@ -24,11 +24,20 @@ import {
     serverTimestamp,
     writeBatch,
 } from 'firebase/firestore';
-import { auth, db, googleProvider } from './firebase';
+import { auth, db, googleProvider, isFirebaseConfigured, firebaseInitErrorMessage } from './firebase';
 import { UserProfile, UserRole, ParentProfile } from '@/types/auth';
+import { NonHomeroomTeacherOption } from '@/types';
 import { getCurrentSchoolYear } from '@/lib/school-year';
 
 const USER_BATCH_LIMIT = 400;
+
+function assertFirebaseConfigured() {
+    if (!isFirebaseConfigured) {
+        const error = new Error(firebaseInitErrorMessage || 'FIREBASE_NOT_CONFIGURED');
+        error.name = 'FIREBASE_NOT_CONFIGURED';
+        throw error;
+    }
+}
 
 type ParentMatchUpdate = {
     uid: string;
@@ -37,6 +46,18 @@ type ParentMatchUpdate = {
 
 type ParentClassInfo = {
     uid: string;
+    schoolCode: string;
+    grade: number;
+    classNum: number;
+};
+
+type NonHomeroomRequestHomeroomUpdate = {
+    id: string;
+    homeroomTeacherId: string | null;
+};
+
+type NonHomeroomRequestClassInfo = {
+    id: string;
     schoolCode: string;
     grade: number;
     classNum: number;
@@ -63,6 +84,30 @@ function extractParentClassInfo(
     };
 }
 
+function extractNonHomeroomRequestClassInfo(
+    id: string,
+    data: Partial<{
+        schoolCode: string;
+        grade: number;
+        classNum: number;
+    }>
+): NonHomeroomRequestClassInfo | null {
+    if (
+        !data.schoolCode ||
+        typeof data.grade !== 'number' ||
+        typeof data.classNum !== 'number'
+    ) {
+        return null;
+    }
+
+    return {
+        id,
+        schoolCode: data.schoolCode,
+        grade: data.grade,
+        classNum: data.classNum,
+    };
+}
+
 async function applyParentMatchUpdates(updates: ParentMatchUpdate[]): Promise<void> {
     if (updates.length === 0) {
         return;
@@ -77,6 +122,28 @@ async function applyParentMatchUpdates(updates: ParentMatchUpdate[]): Promise<vo
                 updatedAt: serverTimestamp(),
             });
         });
+
+        await batch.commit();
+    }
+}
+
+async function applyNonHomeroomRequestHomeroomUpdates(
+    updates: NonHomeroomRequestHomeroomUpdate[]
+): Promise<void> {
+    if (updates.length === 0) {
+        return;
+    }
+
+    for (let index = 0; index < updates.length; index += USER_BATCH_LIMIT) {
+        const batch = writeBatch(db);
+
+        updates
+            .slice(index, index + USER_BATCH_LIMIT)
+            .forEach(({ id, homeroomTeacherId }) => {
+                batch.update(doc(db, 'nonHomeroomRequests', id), {
+                    homeroomTeacherId,
+                });
+            });
 
         await batch.commit();
     }
@@ -161,6 +228,81 @@ async function syncMatchedParentsForTeacher(
     );
 }
 
+async function syncNonHomeroomRequestsForTeacher(
+    teacherUid: string,
+    schoolCode: string,
+    grade: number,
+    classNum: number
+): Promise<void> {
+    if (!schoolCode) {
+        return;
+    }
+
+    const [currentlyAssignedSnapshot, sameSchoolSnapshot] = await Promise.all([
+        getDocs(
+            query(
+                collection(db, 'nonHomeroomRequests'),
+                where('homeroomTeacherId', '==', teacherUid)
+            )
+        ),
+        getDocs(
+            query(
+                collection(db, 'nonHomeroomRequests'),
+                where('schoolCode', '==', schoolCode)
+            )
+        ),
+    ]);
+
+    const updatesById = new Map<string, string | null>();
+
+    await Promise.all(
+        currentlyAssignedSnapshot.docs.map(async (docSnap) => {
+            const requestInfo = extractNonHomeroomRequestClassInfo(docSnap.id, docSnap.data());
+
+            if (!requestInfo) {
+                return;
+            }
+
+            if (
+                requestInfo.schoolCode === schoolCode &&
+                requestInfo.grade === grade &&
+                requestInfo.classNum === classNum
+            ) {
+                updatesById.set(requestInfo.id, teacherUid);
+                return;
+            }
+
+            const rematchedTeacherId = await matchTeacher(
+                requestInfo.schoolCode,
+                requestInfo.grade,
+                requestInfo.classNum
+            );
+            updatesById.set(requestInfo.id, rematchedTeacherId);
+        })
+    );
+
+    sameSchoolSnapshot.docs.forEach((docSnap) => {
+        const requestInfo = extractNonHomeroomRequestClassInfo(docSnap.id, docSnap.data());
+
+        if (
+            !requestInfo ||
+            requestInfo.grade !== grade ||
+            requestInfo.classNum !== classNum
+        ) {
+            return;
+        }
+
+        updatesById.set(requestInfo.id, teacherUid);
+    });
+
+    await applyNonHomeroomRequestHomeroomUpdates(
+        [...updatesById.entries()].map(([id, homeroomTeacherId]) => ({
+            id,
+            homeroomTeacherId,
+        }))
+    );
+}
+
 async function isParentMatchValid(parentProfile: ParentProfile): Promise<boolean> {
     if (!parentProfile.matchedTeacherId) {
         return false;
@@ -187,6 +329,7 @@ async function isParentMatchValid(parentProfile: ParentProfile): Promise<boolean
 
 /** 이메일/비밀번호로 회원가입 */
 export async function signUpWithEmail(email: string, password: string): Promise<User> {
+    assertFirebaseConfigured();
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     return userCredential.user;
 }
@@ -205,6 +348,7 @@ export async function createUserProfile(
         studentName?: string;
     }
 ): Promise<void> {
+    assertFirebaseConfigured();
     const now = Timestamp.now();
     const currentSchoolYear = getCurrentSchoolYear();
 
@@ -238,9 +382,17 @@ export async function createUserProfile(
 
     if (data.role === 'teacher' || data.role === 'admin') {
         try {
-            await syncMatchedParentsForTeacher(uid, data.schoolCode, data.grade, data.classNum);
+            await Promise.all([
+                syncMatchedParentsForTeacher(uid, data.schoolCode, data.grade, data.classNum),
+                syncNonHomeroomRequestsForTeacher(
+                    uid,
+                    data.schoolCode,
+                    data.grade,
+                    data.classNum
+                ),
+            ]);
         } catch (error) {
-            console.error('Failed to backfill parent matches after teacher signup:', error);
+            console.error('Failed to backfill teacher-linked data after signup:', error);
         }
     }
 }
@@ -269,6 +421,7 @@ export async function signInWithEmail(
     email: string,
     password: string
 ): Promise<{ user: User; profile: UserProfile }> {
+    assertFirebaseConfigured();
     // 서버 사이드에서 잠금 상태 확인
     const lockStatus = await serverCheckLock(email, 'check');
 
@@ -323,6 +476,7 @@ export async function signInWithGoogle(): Promise<{
     profile: UserProfile | null;
     isNewUser: boolean;
 }> {
+    assertFirebaseConfigured();
     const userCredential = await signInWithPopup(auth, googleProvider);
     const user = userCredential.user;
 
@@ -350,6 +504,7 @@ export async function signInWithGoogle(): Promise<{
 
 /** 로그아웃 */
 export async function signOutUser(): Promise<void> {
+    assertFirebaseConfigured();
     await signOut(auth);
 }
 
@@ -359,6 +514,7 @@ export async function signOutUser(): Promise<void> {
 
 /** 비밀번호 재설정 이메일 발송 */
 export async function resetPassword(email: string): Promise<void> {
+    assertFirebaseConfigured();
     await sendPasswordResetEmail(auth, email);
 }
 
@@ -367,6 +523,7 @@ export async function changePassword(
     currentPassword: string,
     newPassword: string
 ): Promise<void> {
+    assertFirebaseConfigured();
     const user = auth.currentUser;
     if (!user || !user.email) {
         throw new Error('로그인된 사용자가 없습니다.');
@@ -386,6 +543,7 @@ export async function changePassword(
 
 /** UID로 사용자 프로필 조회 */
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+    assertFirebaseConfigured();
     const docSnap = await getDoc(doc(db, 'users', uid));
     if (!docSnap.exists()) return null;
 
@@ -414,6 +572,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 /** 이메일로 사용자 프로필 조회 */
 export async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
+    assertFirebaseConfigured();
     const q = query(collection(db, 'users'), where('email', '==', email));
     const snapshot = await getDocs(q);
     if (snapshot.empty) return null;
@@ -427,6 +586,7 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfile 
 const MAX_FAILED_ATTEMPTS = 10;
 
 export async function updateParentStudentName(uid: string, studentName: string): Promise<void> {
+    assertFirebaseConfigured();
     await updateDoc(doc(db, 'users', uid), {
         studentName: studentName.trim(),
         updatedAt: serverTimestamp(),
@@ -438,6 +598,7 @@ export async function updateUserGradeClass(
     grade: number,
     classNum: number
 ): Promise<{ matchedTeacherId: string | null }> {
+    assertFirebaseConfigured();
     const profileSnap = await getDoc(doc(db, 'users', uid));
     if (!profileSnap.exists()) {
         throw new Error('PROFILE_NOT_FOUND');
@@ -445,9 +606,7 @@ export async function updateUserGradeClass(
 
     const profile = profileSnap.data() as UserProfile;
     const currentSchoolYear = getCurrentSchoolYear();
-    const isNonHomeroom = grade === 0 && classNum === 0;
-
-    if ((profile.role === 'teacher' || profile.role === 'admin') && !isNonHomeroom) {
+    if ((profile.role === 'teacher' || profile.role === 'admin') && !(grade === 0 && classNum === 0)) {
         const existingTeacherId = await matchTeacher(profile.schoolCode, grade, classNum);
         if (existingTeacherId && existingTeacherId !== uid) {
             throw new Error('DUPLICATE_TEACHER_CLASS');
@@ -475,12 +634,13 @@ export async function updateUserGradeClass(
         updatedAt: serverTimestamp(),
     });
 
-    if (!isNonHomeroom) {
-        try {
-            await syncMatchedParentsForTeacher(uid, profile.schoolCode, grade, classNum);
-        } catch (error) {
-            console.error('Failed to sync parent matches after grade/class update:', error);
-        }
+    try {
+        await Promise.all([
+            syncMatchedParentsForTeacher(uid, profile.schoolCode, grade, classNum),
+            syncNonHomeroomRequestsForTeacher(uid, profile.schoolCode, grade, classNum),
+        ]);
+    } catch (error) {
+        console.error('Failed to sync teacher-linked data after grade/class update:', error);
     }
 
     return { matchedTeacherId: null };
@@ -488,6 +648,7 @@ export async function updateUserGradeClass(
 
 /** 로그인 실패 횟수 증가 (10회 시 잠금) */
 export async function incrementFailedAttempts(uid: string): Promise<boolean> {
+    assertFirebaseConfigured();
     const profile = await getUserProfile(uid);
     if (!profile) return false;
 
@@ -505,6 +666,7 @@ export async function incrementFailedAttempts(uid: string): Promise<boolean> {
 
 /** 관리자 → 계정 잠금 해제 */
 export async function unlockAccount(uid: string): Promise<void> {
+    assertFirebaseConfigured();
     await updateDoc(doc(db, 'users', uid), {
         isLocked: false,
         failedLoginAttempts: 0,
@@ -514,6 +676,7 @@ export async function unlockAccount(uid: string): Promise<void> {
 
 /** 잠긴 계정 목록 조회 (관리자용) */
 export async function getLockedAccounts(): Promise<UserProfile[]> {
+    assertFirebaseConfigured();
     const q = query(collection(db, 'users'), where('isLocked', '==', true));
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => doc.data() as UserProfile);
@@ -529,6 +692,7 @@ export async function checkTeacherDuplicate(
     grade: number,
     classNum: number
 ): Promise<boolean> {
+    assertFirebaseConfigured();
     if (!schoolCode) return false;
 
     const q = query(
@@ -549,6 +713,7 @@ export async function matchTeacher(
     grade: number,
     classNum: number
 ): Promise<string | null> {
+    assertFirebaseConfigured();
     if (!schoolCode) return null;
 
     const q = query(
@@ -571,6 +736,7 @@ export async function matchTeacherWithName(
     grade: number,
     classNum: number
 ): Promise<{ teacherId: string; teacherName: string } | null> {
+    assertFirebaseConfigured();
     if (!schoolCode) return null;
 
     const q = query(
@@ -588,8 +754,40 @@ export async function matchTeacherWithName(
     return { teacherId: data.uid, teacherName: data.name || '' };
 }
 
+export async function getNonHomeroomTeachersBySchool(
+    schoolCode: string
+): Promise<NonHomeroomTeacherOption[]> {
+    assertFirebaseConfigured();
+    if (!schoolCode) {
+        return [];
+    }
+
+    const teachersQuery = query(
+        collection(db, 'users'),
+        where('role', 'in', ['teacher', 'admin']),
+        where('schoolCode', '==', schoolCode),
+        where('grade', '==', 0),
+        where('classNum', '==', 0)
+    );
+
+    const snapshot = await getDocs(teachersQuery);
+
+    return snapshot.docs
+        .map((docSnap) => {
+            const data = docSnap.data() as { uid?: string; name?: string };
+
+            return {
+                teacherId: data.uid || docSnap.id,
+                teacherName: (data.name || '').trim(),
+            };
+        })
+        .filter((teacher) => teacher.teacherId && teacher.teacherName)
+        .sort((a, b) => a.teacherName.localeCompare(b.teacherName, 'ko'));
+}
+
 /** 교사에 매칭된 학부모 목록 조회 */
 export async function getMatchedParents(teacherUid: string): Promise<ParentProfile[]> {
+    assertFirebaseConfigured();
     const q = query(
         collection(db, 'users'),
         where('role', '==', 'parent'),
@@ -606,6 +804,7 @@ export async function getMatchedParents(teacherUid: string): Promise<ParentProfi
 
 /** 회원 탈퇴 (Firebase Auth 사용자 삭제 + Firestore 프로필 삭제) */
 export async function deleteAccount(): Promise<void> {
+    assertFirebaseConfigured();
     const user = auth.currentUser;
     if (!user) {
         throw new Error('로그인된 사용자가 없습니다.');

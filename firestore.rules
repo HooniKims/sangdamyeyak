@@ -149,6 +149,10 @@ service cloud.firestore {
         data.createdAt is int;
     }
 
+    function validNullableString(value) {
+      return value == null || value is string;
+    }
+
     function validReservationShape(data, slotId) {
       return data.keys().hasOnly([
           'teacherId',
@@ -200,6 +204,56 @@ service cloud.firestore {
         get(slotPath).data.startTime == request.resource.data.startTime &&
         get(slotPath).data.endTime == request.resource.data.endTime &&
         get(slotPath).data.status == 'available';
+    }
+
+    function validNonHomeroomRequestShape(data) {
+      return data.keys().hasOnly([
+          'targetTeacherId',
+          'targetTeacherName',
+          'homeroomTeacherId',
+          'schoolCode',
+          'schoolName',
+          'grade',
+          'classNum',
+          'studentName',
+          'preferredDate',
+          'preferredTime',
+          'preferredDateTime',
+          'content',
+          'createdAt'
+        ]) &&
+        data.targetTeacherId is string &&
+        data.targetTeacherName is string &&
+        validNullableString(data.homeroomTeacherId) &&
+        data.schoolCode is string &&
+        data.schoolName is string &&
+        data.grade is int &&
+        data.classNum is int &&
+        data.studentName is string &&
+        data.preferredDate is string &&
+        data.preferredTime is string &&
+        data.preferredDateTime is string &&
+        data.content is string &&
+        data.createdAt is int;
+    }
+
+    function validTeacherManagedNonHomeroomRequestUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'homeroomTeacherId'
+        ]) &&
+        request.resource.data.targetTeacherId == resource.data.targetTeacherId &&
+        request.resource.data.targetTeacherName == resource.data.targetTeacherName &&
+        request.resource.data.schoolCode == resource.data.schoolCode &&
+        request.resource.data.schoolName == resource.data.schoolName &&
+        request.resource.data.grade == resource.data.grade &&
+        request.resource.data.classNum == resource.data.classNum &&
+        request.resource.data.studentName == resource.data.studentName &&
+        request.resource.data.preferredDate == resource.data.preferredDate &&
+        request.resource.data.preferredTime == resource.data.preferredTime &&
+        request.resource.data.preferredDateTime == resource.data.preferredDateTime &&
+        request.resource.data.content == resource.data.content &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        resource.data.schoolCode == currentUserSchoolCode();
     }
 
     function publicReservationLookupAllowed() {
@@ -290,6 +344,36 @@ service cloud.firestore {
         (
           getAfter(/databases/$(database)/documents/availableSlots/$(resource.data.slotId)).data.status == 'available'
         );
+    }
+
+    match /nonHomeroomRequests/{requestId} {
+      allow list: if isAdmin() ||
+        (isTeacherOrAdmin() &&
+          (
+            resource.data.targetTeacherId == request.auth.uid ||
+            resource.data.homeroomTeacherId == request.auth.uid
+          )) ||
+        publicReservationLookupAllowed();
+
+      allow get: if isAdmin() ||
+        (isTeacherOrAdmin() &&
+          (
+            resource.data.targetTeacherId == request.auth.uid ||
+            resource.data.homeroomTeacherId == request.auth.uid
+          ));
+
+      allow create: if validNonHomeroomRequestShape(request.resource.data);
+
+      allow update: if isAdmin() ||
+        (isTeacherOrAdmin() && validTeacherManagedNonHomeroomRequestUpdate());
+
+      allow delete: if isAdmin() ||
+        (isTeacherOrAdmin() &&
+          (
+            resource.data.targetTeacherId == request.auth.uid ||
+            resource.data.homeroomTeacherId == request.auth.uid
+          )) ||
+        !isSignedIn();
     }
 
     match /{document=**} {

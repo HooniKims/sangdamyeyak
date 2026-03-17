@@ -1,22 +1,49 @@
 'use client';
 
 import { useState } from 'react';
-import { doc, runTransaction } from 'firebase/firestore';
-import { Calendar, Clock, MessageSquare, Search, User, X } from 'lucide-react';
-import { db } from '@/lib/firebase';
+import { deleteDoc, doc, runTransaction } from 'firebase/firestore';
+import { Calendar, Clock, MessageSquare, Search, User, Users, X } from 'lucide-react';
+import { db, isFirebaseConfigured } from '@/lib/firebase';
 import Layout from '@/components/Layout';
 import Button from '@/components/Button';
 import ConfirmModal from '@/components/ConfirmModal';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import SchoolSearch from '@/components/SchoolSearch';
 import { useLanguage } from '@/lib/i18n';
-import { Reservation } from '@/types';
+import { BookingRecord } from '@/types';
 import { SchoolInfo } from '@/types/auth';
 import { formatDateI18n } from '@/lib/utils';
 import {
   formatStudentLookupLabel,
-  searchReservationsByStudentInfo,
+  getBookingRecordDate,
+  getBookingRecordTime,
+  isNonHomeroomBookingRecord,
+  searchBookingRecordsByStudentInfo,
 } from '@/lib/reservation-firebase';
+
+function formatPreferredDateTime(date: string, time: string, language: 'ko' | 'en') {
+  if (!date && !time) {
+    return '';
+  }
+
+  if (!date) {
+    return time;
+  }
+
+  return `${formatDateI18n(date, language)} ${time}`.trim();
+}
+
+function isPastBookingRecord(record: BookingRecord) {
+  const date = getBookingRecordDate(record);
+  const time = getBookingRecordTime(record);
+  const dateTime = new Date(`${date}T${time || '00:00'}`);
+
+  if (Number.isNaN(dateTime.getTime())) {
+    return new Date(date) < new Date(new Date().toDateString());
+  }
+
+  return dateTime.getTime() < Date.now();
+}
 
 export default function PublicCheckReservationPage() {
   const { t, language } = useLanguage();
@@ -25,7 +52,7 @@ export default function PublicCheckReservationPage() {
   const [grade, setGrade] = useState(1);
   const [classNum, setClassNum] = useState(1);
   const [studentName, setStudentName] = useState('');
-  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [records, setRecords] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
@@ -36,6 +63,15 @@ export default function PublicCheckReservationPage() {
     cancelText: null as string | null,
   });
 
+  const ensureFirebaseReady = () => {
+    if (!isFirebaseConfigured) {
+      alert(t('firebaseConfigMissing'));
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSchoolSelect = (school: SchoolInfo) => {
     setSchoolName(school.schoolName);
     setSchoolCode(school.schoolCode);
@@ -43,6 +79,10 @@ export default function PublicCheckReservationPage() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!ensureFirebaseReady()) {
+      return;
+    }
 
     if (!schoolName.trim()) {
       alert(t('selectSchool'));
@@ -62,14 +102,14 @@ export default function PublicCheckReservationPage() {
     setLoading(true);
 
     try {
-      const foundReservations = await searchReservationsByStudentInfo({
+      const foundRecords = await searchBookingRecordsByStudentInfo({
         studentName,
         grade,
         classNum,
         schoolCode,
       });
 
-      setReservations(foundReservations);
+      setRecords(foundRecords);
       setSearched(true);
     } catch (error) {
       console.error('Reservation lookup error:', error);
@@ -79,7 +119,11 @@ export default function PublicCheckReservationPage() {
     }
   };
 
-  const handleCancelReservation = (reservation: Reservation) => {
+  const handleCancelReservation = (record: BookingRecord) => {
+    if (!ensureFirebaseReady()) {
+      return;
+    }
+
     setConfirmModal({
       isOpen: true,
       title: t('cancelReservationTitle'),
@@ -87,15 +131,19 @@ export default function PublicCheckReservationPage() {
       cancelText: t('cancel'),
       onConfirm: async () => {
         try {
-          const reservationRef = doc(db, 'reservations', reservation.id);
-          const slotRef = doc(db, 'availableSlots', reservation.slotId);
+          if (isNonHomeroomBookingRecord(record)) {
+            await deleteDoc(doc(db, 'nonHomeroomRequests', record.id));
+          } else {
+            const reservationRef = doc(db, 'reservations', record.id);
+            const slotRef = doc(db, 'availableSlots', record.slotId);
 
-          await runTransaction(db, async transaction => {
-            transaction.delete(reservationRef);
-            transaction.update(slotRef, { status: 'available' });
-          });
+            await runTransaction(db, async transaction => {
+              transaction.delete(reservationRef);
+              transaction.update(slotRef, { status: 'available' });
+            });
+          }
 
-          setReservations(prev => prev.filter(item => item.id !== reservation.id));
+          setRecords(prev => prev.filter(item => item.id !== record.id));
           alert(t('reservationCanceled'));
         } catch (error) {
           console.error('Reservation cancel error:', error);
@@ -112,7 +160,7 @@ export default function PublicCheckReservationPage() {
     >
       <div className="p-6 sm:p-8">
         <div className="mx-auto max-w-3xl space-y-6">
-          <form onSubmit={handleSearch} className="rounded-lg bg-white p-6 shadow-md space-y-4">
+          <form onSubmit={handleSearch} className="space-y-4 rounded-lg bg-white p-6 shadow-md">
             <div>
               <label className="mb-2 flex items-center text-sm font-medium text-gray-700">
                 <User className="mr-2 h-4 w-4" />
@@ -216,7 +264,7 @@ export default function PublicCheckReservationPage() {
               </div>
             )}
 
-            {!loading && searched && reservations.length === 0 && (
+            {!loading && searched && records.length === 0 && (
               <div className="rounded-lg bg-gray-50 py-12 text-center">
                 <Calendar className="mx-auto mb-3 h-12 w-12 text-gray-400" />
                 <p className="text-gray-600">{t('noReservations')}</p>
@@ -224,30 +272,40 @@ export default function PublicCheckReservationPage() {
               </div>
             )}
 
-            {!loading && reservations.length > 0 && (
+            {!loading && records.length > 0 && (
               <div className="space-y-4">
                 <div className="text-sm text-gray-600">
-                  {t('totalReservations', { count: reservations.length })}
+                  {t('totalReservations', { count: records.length })}
                 </div>
 
-                {reservations.map(reservation => {
-                  const isPast = new Date(reservation.date) < new Date(new Date().toDateString());
+                {records.map(record => {
+                  const isPast = isPastBookingRecord(record);
 
                   return (
                     <div
-                      key={reservation.id}
+                      key={record.id}
                       className={`rounded-lg border-2 p-5 ${
                         isPast
                           ? 'border-gray-300 bg-gray-50'
                           : 'border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50'
                       }`}
                     >
-                      <div className="mb-3 flex flex-col sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex-1">
-                          <div className="mb-2 flex items-center gap-2">
-                            <Calendar className="h-5 w-5 text-blue-600" />
+                      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded px-2 py-1 text-xs font-semibold ${
+                                isNonHomeroomBookingRecord(record)
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              {isNonHomeroomBookingRecord(record)
+                                ? t('nonHomeroomReservation')
+                                : t('homeroomReservation')}
+                            </span>
                             <span className="font-semibold text-gray-900">
-                              {formatDateI18n(reservation.date, language)}
+                              {formatDateI18n(getBookingRecordDate(record), language)}
                             </span>
                             {isPast && (
                               <span className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-600">
@@ -255,17 +313,41 @@ export default function PublicCheckReservationPage() {
                               </span>
                             )}
                           </div>
-                          <div className="mb-1 flex items-center gap-2 text-sm text-gray-700">
-                            <Clock className="h-4 w-4" />
-                            <span>
-                              {t('periodLabel', { number: reservation.period })} ({reservation.startTime} - {reservation.endTime})
-                            </span>
-                          </div>
+
+                          {isNonHomeroomBookingRecord(record) ? (
+                            <>
+                              <div className="flex items-center gap-2 text-sm text-gray-700">
+                                <Users className="h-4 w-4 text-gray-500" />
+                                <span className="font-medium">{t('desiredTeacher')}:</span>
+                                <span>{record.targetTeacherName}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-sm text-gray-700">
+                                <Clock className="h-4 w-4 text-gray-500" />
+                                {formatPreferredDateTime(record.preferredDate, record.preferredTime, language)}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2 text-sm text-gray-700">
+                                <Clock className="h-4 w-4" />
+                                <span>
+                                  {t('periodLabel', { number: record.period })} ({record.startTime} - {record.endTime})
+                                </span>
+                              </div>
+                              <div className="flex items-start gap-2 text-sm">
+                                <MessageSquare className="mt-0.5 h-4 w-4 text-gray-500" />
+                                <div>
+                                  <span className="font-medium text-gray-700">{t('topic')}:</span>{' '}
+                                  <span className="text-gray-600">{t(record.topic)}</span>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
 
                         {!isPast && (
                           <Button
-                            onClick={() => handleCancelReservation(reservation)}
+                            onClick={() => handleCancelReservation(record)}
                             variant="ghost"
                             size="sm"
                             className="mt-2 text-red-600 hover:bg-red-50 sm:mt-0"
@@ -280,22 +362,16 @@ export default function PublicCheckReservationPage() {
                         <div className="flex items-start gap-2 text-sm">
                           <MessageSquare className="mt-0.5 h-4 w-4 text-gray-500" />
                           <div>
-                            <span className="font-medium text-gray-700">{t('topic')}:</span>{' '}
-                            <span className="text-gray-600">{t(reservation.topic)}</span>
-                          </div>
-                        </div>
-
-                        <div className="pl-6">
-                          <div className="text-sm">
-                            <span className="font-medium text-gray-700">{t('content')}:</span>
+                            <span className="font-medium text-gray-700">
+                              {isNonHomeroomBookingRecord(record)
+                                ? t('nonHomeroomCounselingContent')
+                                : t('content')}
+                              :
+                            </span>
                             <p className="mt-1 whitespace-pre-wrap text-gray-600">
-                              {reservation.content}
+                              {record.content}
                             </p>
                           </div>
-                        </div>
-
-                        <div className="pl-6 pt-1 text-xs text-gray-500">
-                          {t('reservationDate')}: {new Date(reservation.createdAt).toLocaleString(language === 'ko' ? 'ko-KR' : 'en-US')}
                         </div>
                       </div>
                     </div>

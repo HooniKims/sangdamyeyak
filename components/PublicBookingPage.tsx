@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { collection, doc, onSnapshot, query, runTransaction, where } from 'firebase/firestore';
 import { Calendar, CheckCircle2, Clock, MessageSquare, Search, User } from 'lucide-react';
-import { db } from '@/lib/firebase';
+import { db, isFirebaseConfigured } from '@/lib/firebase';
 import Layout from '@/components/Layout';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -35,6 +35,13 @@ export default function PublicBookingPage() {
   const [submissionError, setSubmissionError] = useState('');
 
   useEffect(() => {
+    if (!isFirebaseConfigured) {
+      setLoading(false);
+      setAvailableSlots([]);
+      setSubmissionError(t('firebaseConfigMissing'));
+      return;
+    }
+
     if (!teacherId) return;
 
     const slotsQuery = query(
@@ -60,7 +67,7 @@ export default function PublicBookingPage() {
     });
 
     return () => unsubscribe();
-  }, [teacherId]);
+  }, [teacherId, t]);
 
   useEffect(() => {
     if (!selectedSlot) return;
@@ -80,6 +87,10 @@ export default function PublicBookingPage() {
 
   const handleStep1Submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!isFirebaseConfigured) {
+      setSubmissionError(t('firebaseConfigMissing'));
+      return;
+    }
     setSubmissionError('');
     setStep(2);
   };
@@ -95,6 +106,11 @@ export default function PublicBookingPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (!isFirebaseConfigured) {
+      setSubmissionError(t('firebaseConfigMissing'));
+      return;
+    }
 
     const trimmedStudentName = studentName.trim();
 

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, firebaseInitErrorMessage, isFirebaseConfigured } from '@/lib/firebase';
 import { getUserProfile, signOutUser } from '@/lib/auth-firebase';
 import { requiresAnnualGradeClassUpdate } from '@/lib/school-year';
 import { UserProfile } from '@/types/auth';
@@ -28,10 +28,18 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(isFirebaseConfigured);
 
     // Firebase Auth 상태 리스너
     useEffect(() => {
+        if (!isFirebaseConfigured) {
+            console.warn(
+                'Firebase 인증이 비활성화되었습니다:',
+                firebaseInitErrorMessage || 'unknown firebase init error'
+            );
+            return;
+        }
+
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             setUser(firebaseUser);
 

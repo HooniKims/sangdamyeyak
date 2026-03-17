@@ -9,9 +9,9 @@ import Calendar from '@/components/Calendar';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ConfirmModal from '@/components/ConfirmModal';
-import { Period, AvailableSlot, Reservation, DEFAULT_PERIODS } from '@/types';
+import { Period, AvailableSlot, Reservation, DEFAULT_PERIODS, NonHomeroomRequest } from '@/types';
 import { formatDate, formatDateI18n } from '@/lib/utils';
-import { Clock, Trash2, Settings, Calendar as CalendarIcon, Download, X, Home, CheckSquare, Square } from 'lucide-react';
+import { Clock, Trash2, Settings, Calendar as CalendarIcon, Download, X, Home, CheckSquare, Square, Users } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/components/AuthContext';
 import { useLanguage } from '@/lib/i18n';
@@ -19,8 +19,71 @@ import { formatReservationStudentLabel } from '@/lib/reservation-firebase';
 
 const BULK_DELETE_BATCH_SIZE = 400;
 
+function NonHomeroomRequestTable({
+  title,
+  description,
+  requests,
+  language,
+  t,
+}: {
+  title: string;
+  description?: string;
+  requests: NonHomeroomRequest[];
+  language: 'ko' | 'en';
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white">
+      <div className="border-b border-gray-100 px-5 py-4">
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+          <Users className="h-5 w-5 text-emerald-600" />
+          {title}
+        </h3>
+        {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
+      </div>
+
+      {requests.length === 0 ? (
+        <div className="px-5 py-10 text-center text-sm text-gray-500">
+          {t('noNonHomeroomRequests')}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 text-left text-gray-600">
+              <tr>
+                <th className="px-4 py-3 font-medium">{t('desiredDateTime')}</th>
+                <th className="px-4 py-3 font-medium">{t('desiredTeacher')}</th>
+                <th className="px-4 py-3 font-medium">{t('grade')}</th>
+                <th className="px-4 py-3 font-medium">{t('classNum')}</th>
+                <th className="px-4 py-3 font-medium">{t('studentNameField')}</th>
+                <th className="px-4 py-3 font-medium">{t('content')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((request) => (
+                <tr key={request.id} className="border-t border-gray-100 align-top">
+                  <td className="px-4 py-3 text-gray-700">
+                    {formatDateI18n(request.preferredDate, language)} {request.preferredTime}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{request.targetTeacherName}</td>
+                  <td className="px-4 py-3 text-gray-700">{request.grade}</td>
+                  <td className="px-4 py-3 text-gray-700">{request.classNum}</td>
+                  <td className="px-4 py-3 text-gray-900">{request.studentName}</td>
+                  <td className="min-w-[280px] px-4 py-3 whitespace-pre-wrap text-gray-700">
+                    {request.content}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TeacherPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const router = useRouter();
   const { t, language } = useLanguage();
 
@@ -34,6 +97,8 @@ export default function TeacherPage() {
   const [selectedSlotIds, setSelectedSlotIds] = useState<Set<string>>(new Set());
   const [selectedReservationIds, setSelectedReservationIds] = useState<Set<string>>(new Set());
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [directNonHomeroomRequests, setDirectNonHomeroomRequests] = useState<NonHomeroomRequest[]>([]);
+  const [classNonHomeroomRequests, setClassNonHomeroomRequests] = useState<NonHomeroomRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
@@ -44,6 +109,11 @@ export default function TeacherPage() {
     confirmText: undefined as string | undefined,
     cancelText: undefined as string | null | undefined,
   });
+  const isNonHomeroomTeacher =
+    Boolean(profile) &&
+    (profile?.role === 'teacher' || profile?.role === 'admin') &&
+    profile.grade === 0 &&
+    profile.classNum === 0;
 
   // 로그인 안 된 상태면 로그인 페이지로 이동
   useEffect(() => {
@@ -78,7 +148,9 @@ export default function TeacherPage() {
 
   // 상담 가능 시간 및 예약 현황 실시간 로드
   useEffect(() => {
-    if (!teacherId) return;
+    if (!teacherId || isNonHomeroomTeacher) {
+      return;
+    }
 
     const today = formatDate(new Date()); // YYYY-MM-DD 형식
 
@@ -122,7 +194,64 @@ export default function TeacherPage() {
       unsubscribeSlots();
       unsubscribeReservations();
     };
-  }, [teacherId]);
+  }, [teacherId, isNonHomeroomTeacher]);
+
+  useEffect(() => {
+    if (!teacherId || !isNonHomeroomTeacher) {
+      return;
+    }
+
+    const requestsQuery = query(
+      collection(db, 'nonHomeroomRequests'),
+      where('targetTeacherId', '==', teacherId)
+    );
+
+    const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
+      const requests: NonHomeroomRequest[] = [];
+
+      snapshot.forEach((docSnap) => {
+        requests.push({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<NonHomeroomRequest, 'id'>),
+        });
+      });
+
+      setDirectNonHomeroomRequests(
+        requests.sort((a, b) => a.preferredDateTime.localeCompare(b.preferredDateTime))
+      );
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [teacherId, isNonHomeroomTeacher]);
+
+  useEffect(() => {
+    if (!teacherId || isNonHomeroomTeacher) {
+      return;
+    }
+
+    const requestsQuery = query(
+      collection(db, 'nonHomeroomRequests'),
+      where('homeroomTeacherId', '==', teacherId)
+    );
+
+    const unsubscribe = onSnapshot(requestsQuery, (snapshot) => {
+      const requests: NonHomeroomRequest[] = [];
+
+      snapshot.forEach((docSnap) => {
+        requests.push({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<NonHomeroomRequest, 'id'>),
+        });
+      });
+
+      setClassNonHomeroomRequests(
+        requests.sort((a, b) => a.preferredDateTime.localeCompare(b.preferredDateTime))
+      );
+    });
+
+    return () => unsubscribe();
+  }, [teacherId, isNonHomeroomTeacher]);
 
   // 교시 시간 저장
   const savePeriods = async () => {
@@ -452,7 +581,7 @@ export default function TeacherPage() {
     XLSX.writeFile(workbook, fileName);
   };
 
-  if (authLoading || !user) {
+  if (authLoading || !user || !profile) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-[60vh]">
@@ -483,10 +612,12 @@ export default function TeacherPage() {
     deletableSlots.length > 0 && deletableSlots.every(slot => selectedDeletableSlotIds.has(slot.id));
 
   return (
-    <Layout title={t('counselingManage')} description={t('counselingManageDesc')}>
+    <Layout
+      title={t('counselingManage')}
+      description={isNonHomeroomTeacher ? t('nonHomeroomDashboardDesc') : t('counselingManageDesc')}
+    >
       <div className="p-6 sm:p-8">
-        {/* 상단 버튼들 */}
-        <div className="mb-6 flex gap-3 flex-wrap">
+        <div className="mb-6 flex flex-wrap gap-3">
           <Button
             onClick={() => router.push('/')}
             variant="secondary"
@@ -495,315 +626,343 @@ export default function TeacherPage() {
             <Home className="w-4 h-4 mr-2" />
             {t('backToMain')}
           </Button>
-          <Button
-            onClick={() => setShowSettings(!showSettings)}
-            variant="secondary"
-            size="sm"
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            {t('periodSettings')}
-          </Button>
-        </div>
-
-        {/* 교시 설정 패널 */}
-        {showSettings && (
-          <div className="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
-            <h3 className="text-lg font-semibold mb-4">{t('periodTimeSettings')}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              {periods.map((period, index) => (
-                <div key={period.number} className="flex items-center gap-2">
-                  <span className="text-sm font-medium w-16">{period.label}</span>
-                  <input
-                    type="time"
-                    value={period.startTime}
-                    onChange={(e) => {
-                      const newPeriods = [...periods];
-                      newPeriods[index].startTime = e.target.value;
-                      setPeriods(newPeriods);
-                    }}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm"
-                  />
-                  <span>~</span>
-                  <input
-                    type="time"
-                    value={period.endTime}
-                    onChange={(e) => {
-                      const newPeriods = [...periods];
-                      newPeriods[index].endTime = e.target.value;
-                      setPeriods(newPeriods);
-                    }}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm"
-                  />
-                </div>
-              ))}
-            </div>
-            <Button onClick={savePeriods} size="sm">
-              {t('saveTime')}
+          {!isNonHomeroomTeacher && (
+            <Button
+              onClick={() => setShowSettings(!showSettings)}
+              variant="secondary"
+              size="sm"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              {t('periodSettings')}
             </Button>
-          </div>
-        )}
-
-        {/* 날짜 선택 */}
-        <div className="mb-8">
-          <h3 className="text-lg font-semibold mb-4 flex items-center">
-            <CalendarIcon className="w-5 h-5 mr-2" />
-            {t('selectCounselingDate')}
-          </h3>
-          <Calendar selectedDates={selectedDates} onDateSelect={handleDateSelect} />
+          )}
         </div>
 
-        {/* 선택된 날짜별 교시 선택 */}
-        {selectedDates.length > 0 && (
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold mb-4 flex items-center">
-              <Clock className="w-5 h-5 mr-2" />
-              {t('selectPeriod')}
-            </h3>
-            <div className="space-y-4">
-              {selectedDates.map((date) => (
-                <div key={date} className="p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium mb-3 text-gray-900">
-                    {formatDateI18n(date, language)}
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {periods.map((period) => {
-                      const isSelected = selectedPeriods[date]?.includes(period.number);
-                      return (
-                        <button
-                          key={period.number}
-                          onClick={() => handlePeriodToggle(date, period.number)}
-                          className={`
-                            px-3 py-2 rounded-lg text-sm font-medium transition-all
-                            ${isSelected
-                              ? 'bg-blue-600 text-white shadow-md'
-                              : 'bg-white text-gray-700 border border-gray-300 hover:border-blue-400'
-                            }
-                          `}
-                        >
-                          {period.label}
-                          <div className="text-xs opacity-90 mt-1">
-                            {period.startTime}-{period.endTime}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+        {isNonHomeroomTeacher ? (
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
+              {t('nonHomeroomTeacherPageHint')}
             </div>
-            <div className="mt-4">
-              <Button onClick={handleSaveSlots} size="lg" className="w-full sm:w-auto">
-                {t('completeCounselingSetup')}
-              </Button>
-            </div>
+            <NonHomeroomRequestTable
+              title={t('nonHomeroomRequests')}
+              description={t('nonHomeroomRequestsDesc')}
+              requests={directNonHomeroomRequests}
+              language={language}
+              t={t}
+            />
           </div>
-        )}
-
-        {/* 설정된 상담 가능 시간 목록 */}
-        {availableSlots.length > 0 && (
-          <div className="mb-8">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-lg font-semibold">{t('setAvailableTimes')}</h3>
-              {deletableSlots.length > 0 && (
-                <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center">
-                  <button
-                    type="button"
-                    onClick={toggleSelectAllSlots}
-                    className="flex items-center gap-2 text-sm text-gray-600 transition-colors hover:text-gray-900"
-                  >
-                    {isAllSlotsSelected ? (
-                      <CheckSquare className="h-4 w-4 text-blue-600" />
-                    ) : (
-                      <Square className="h-4 w-4 text-gray-400" />
-                    )}
-                    {t('selectAll')} ({selectedSlotCount}/{deletableSlots.length})
-                  </button>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    size="sm"
-                    className="sm:min-w-[132px]"
-                    disabled={selectedSlotCount === 0}
-                    onClick={handleBulkDeleteSlots}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {t('deleteSelected')}
-                  </Button>
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              {sortedAvailableSlots.map((slot) => {
-                const isSelected = selectedDeletableSlotIds.has(slot.id);
-
-                return (
-                  <div
-                    key={slot.id}
-                    className={`flex items-center justify-between rounded-lg border p-3 ${slot.status === 'reserved'
-                        ? 'border-gray-300 bg-gray-100'
-                        : isSelected
-                          ? 'border-blue-300 bg-blue-50'
-                          : 'border-gray-200 bg-white'
-                      }`}
-                  >
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      {slot.status === 'available' && (
-                        <button
-                          type="button"
-                          onClick={() => toggleSlotSelection(slot.id)}
-                          className="shrink-0 text-gray-400 transition-colors hover:text-blue-600"
-                          aria-label={isSelected ? t('cancel') : t('selectAll')}
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="h-5 w-5 text-blue-600" />
-                          ) : (
-                            <Square className="h-5 w-5" />
-                          )}
-                        </button>
-                      )}
-                      <div className="flex-1">
-                        <span className="font-medium">{formatDateI18n(slot.date, language)}</span>
-                        <span className="mx-2 text-gray-400">|</span>
-                        <span className="text-gray-700">
-                          {t('periodLabel', { number: slot.period })} ({slot.startTime}-{slot.endTime})
-                        </span>
-                        {slot.status === 'reserved' && (
-                          <span className="ml-2 rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
-                            {t('reserved')}
-                          </span>
-                        )}
-                      </div>
+        ) : (
+          <>
+            {showSettings && (
+              <div className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-6">
+                <h3 className="mb-4 text-lg font-semibold">{t('periodTimeSettings')}</h3>
+                <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {periods.map((period, index) => (
+                    <div key={period.number} className="flex items-center gap-2">
+                      <span className="w-16 text-sm font-medium">{period.label}</span>
+                      <input
+                        type="time"
+                        value={period.startTime}
+                        onChange={(e) => {
+                          const newPeriods = [...periods];
+                          newPeriods[index].startTime = e.target.value;
+                          setPeriods(newPeriods);
+                        }}
+                        className="rounded border border-gray-300 px-2 py-1 text-sm"
+                      />
+                      <span>~</span>
+                      <input
+                        type="time"
+                        value={period.endTime}
+                        onChange={(e) => {
+                          const newPeriods = [...periods];
+                          newPeriods[index].endTime = e.target.value;
+                          setPeriods(newPeriods);
+                        }}
+                        className="rounded border border-gray-300 px-2 py-1 text-sm"
+                      />
                     </div>
-                    {slot.status === 'available' && (
-                      <Button
-                        onClick={() => handleDeleteSlot(slot.id)}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 예약 현황 */}
-        {reservations.length > 0 && (
-          <div>
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-lg font-semibold">{t('reservationStatus')} ({reservations.length}{t('reservationCount', { count: '' })})</h3>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center">
-                  <button
-                    type="button"
-                    onClick={toggleSelectAllReservations}
-                    className="flex items-center gap-2 text-sm text-gray-600 transition-colors hover:text-gray-900"
-                  >
-                    {reservations.length > 0 && reservations.every(r => selectedReservationIds.has(r.id)) ? (
-                      <CheckSquare className="h-4 w-4 text-blue-600" />
-                    ) : (
-                      <Square className="h-4 w-4 text-gray-400" />
-                    )}
-                    {t('selectAllReservations')} ({selectedReservationIds.size}/{reservations.length})
-                  </button>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    size="sm"
-                    className="sm:min-w-[132px]"
-                    disabled={selectedReservationIds.size === 0}
-                    onClick={handleBulkCancelReservations}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {t('deleteSelected')}
-                  </Button>
+                  ))}
                 </div>
-                <Button
-                  onClick={handleExportToExcel}
-                  variant="secondary"
-                  size="sm"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  {t('exportExcel')}
+                <Button onClick={savePeriods} size="sm">
+                  {t('saveTime')}
                 </Button>
               </div>
+            )}
+
+            <div className="mb-8">
+              <h3 className="mb-4 flex items-center text-lg font-semibold">
+                <CalendarIcon className="w-5 h-5 mr-2" />
+                {t('selectCounselingDate')}
+              </h3>
+              <Calendar selectedDates={selectedDates} onDateSelect={handleDateSelect} />
             </div>
-            <div className="space-y-4">
-              {reservations.map((reservation) => {
-                const isReservationSelected = selectedReservationIds.has(reservation.id);
-                return (
-                  <div
-                    key={reservation.id}
-                    className={`p-4 rounded-lg border ${isReservationSelected
-                        ? 'border-blue-300 bg-blue-50'
-                        : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
-                      }`}
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2">
-                      <div className="flex min-w-0 flex-1 items-start gap-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleReservationSelection(reservation.id)}
-                          className="shrink-0 mt-1 text-gray-400 transition-colors hover:text-blue-600"
-                        >
-                          {isReservationSelected ? (
-                            <CheckSquare className="h-5 w-5 text-blue-600" />
-                          ) : (
-                            <Square className="h-5 w-5" />
-                          )}
-                        </button>
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-900 mb-1">
-                            {formatReservationStudentLabel(reservation, language)}
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            {formatDateI18n(reservation.date, language)} {t('periodLabel', { number: reservation.period })}
-                          </div>
-                        </div>
+
+            {selectedDates.length > 0 && (
+              <div className="mb-8">
+                <h3 className="mb-4 flex items-center text-lg font-semibold">
+                  <Clock className="w-5 h-5 mr-2" />
+                  {t('selectPeriod')}
+                </h3>
+                <div className="space-y-4">
+                  {selectedDates.map((date) => (
+                    <div key={date} className="rounded-lg bg-gray-50 p-4">
+                      <h4 className="mb-3 font-medium text-gray-900">
+                        {formatDateI18n(date, language)}
+                      </h4>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {periods.map((period) => {
+                          const isSelected = selectedPeriods[date]?.includes(period.number);
+                          return (
+                            <button
+                              key={period.number}
+                              onClick={() => handlePeriodToggle(date, period.number)}
+                              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                isSelected
+                                  ? 'bg-blue-600 text-white shadow-md'
+                                  : 'border border-gray-300 bg-white text-gray-700 hover:border-blue-400'
+                              }`}
+                            >
+                              {period.label}
+                              <div className="mt-1 text-xs opacity-90">
+                                {period.startTime}-{period.endTime}
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
-                      <Button
-                        onClick={() => handleCancelReservation(reservation)}
-                        variant="ghost"
-                        size="sm"
-                        className="mt-2 sm:mt-0 text-red-600 hover:bg-red-50"
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4">
+                  <Button onClick={handleSaveSlots} size="lg" className="w-full sm:w-auto">
+                    {t('completeCounselingSetup')}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {availableSlots.length > 0 && (
+              <div className="mb-8">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-lg font-semibold">{t('setAvailableTimes')}</h3>
+                  {deletableSlots.length > 0 && (
+                    <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center">
+                      <button
+                        type="button"
+                        onClick={toggleSelectAllSlots}
+                        className="flex items-center gap-2 text-sm text-gray-600 transition-colors hover:text-gray-900"
                       >
-                        <X className="w-4 h-4 mr-1" />
-                        {t('cancel')}
+                        {isAllSlotsSelected ? (
+                          <CheckSquare className="h-4 w-4 text-blue-600" />
+                        ) : (
+                          <Square className="h-4 w-4 text-gray-400" />
+                        )}
+                        {t('selectAll')} ({selectedSlotCount}/{deletableSlots.length})
+                      </button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        className="sm:min-w-[132px]"
+                        disabled={selectedSlotCount === 0}
+                        onClick={handleBulkDeleteSlots}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {t('deleteSelected')}
                       </Button>
                     </div>
-                    <div className="text-sm text-gray-700 mb-1 sm:ml-8">
-                      <span className="font-medium">{t('time')}:</span> {reservation.startTime} - {reservation.endTime}
-                    </div>
-                    <div className="text-sm text-gray-700 mb-1 sm:ml-8">
-                      <span className="font-medium">{t('topic')}:</span> {reservation.topic}
-                    </div>
-                    <div className="text-sm text-gray-700 mb-1 sm:ml-8">
-                      <span className="font-medium">{t('method')}:</span>{' '}
-                      {reservation.consultationType === 'face'
-                        ? t('faceToFace')
-                        : reservation.consultationType === 'phone'
-                          ? t('phoneCounseling')
-                          : `${t('other')} (${reservation.consultationTypeEtc || ''})`}
-                    </div>
-                    <div className="text-sm text-gray-700 sm:ml-8">
-                      <span className="font-medium">{t('content')}:</span> {reservation.content}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {sortedAvailableSlots.map((slot) => {
+                    const isSelected = selectedDeletableSlotIds.has(slot.id);
 
-        {availableSlots.length === 0 && reservations.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>{t('noSetTimes')}</p>
-            <p className="text-sm">{t('noSetTimesHint')}</p>
-          </div>
+                    return (
+                      <div
+                        key={slot.id}
+                        className={`flex items-center justify-between rounded-lg border p-3 ${
+                          slot.status === 'reserved'
+                            ? 'border-gray-300 bg-gray-100'
+                            : isSelected
+                              ? 'border-blue-300 bg-blue-50'
+                              : 'border-gray-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          {slot.status === 'available' && (
+                            <button
+                              type="button"
+                              onClick={() => toggleSlotSelection(slot.id)}
+                              className="shrink-0 text-gray-400 transition-colors hover:text-blue-600"
+                              aria-label={isSelected ? t('cancel') : t('selectAll')}
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="h-5 w-5 text-blue-600" />
+                              ) : (
+                                <Square className="h-5 w-5" />
+                              )}
+                            </button>
+                          )}
+                          <div className="flex-1">
+                            <span className="font-medium">{formatDateI18n(slot.date, language)}</span>
+                            <span className="mx-2 text-gray-400">|</span>
+                            <span className="text-gray-700">
+                              {t('periodLabel', { number: slot.period })} ({slot.startTime}-{slot.endTime})
+                            </span>
+                            {slot.status === 'reserved' && (
+                              <span className="ml-2 rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
+                                {t('reserved')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {slot.status === 'available' && (
+                          <Button
+                            onClick={() => handleDeleteSlot(slot.id)}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {reservations.length > 0 && (
+              <div className="mb-8">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-lg font-semibold">
+                    {t('reservationStatus')} ({reservations.length}{t('reservationCount', { count: '' })})
+                  </h3>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:flex-row sm:items-center">
+                      <button
+                        type="button"
+                        onClick={toggleSelectAllReservations}
+                        className="flex items-center gap-2 text-sm text-gray-600 transition-colors hover:text-gray-900"
+                      >
+                        {reservations.length > 0 && reservations.every(r => selectedReservationIds.has(r.id)) ? (
+                          <CheckSquare className="h-4 w-4 text-blue-600" />
+                        ) : (
+                          <Square className="h-4 w-4 text-gray-400" />
+                        )}
+                        {t('selectAllReservations')} ({selectedReservationIds.size}/{reservations.length})
+                      </button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        className="sm:min-w-[132px]"
+                        disabled={selectedReservationIds.size === 0}
+                        onClick={handleBulkCancelReservations}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {t('deleteSelected')}
+                      </Button>
+                    </div>
+                    <Button
+                      onClick={handleExportToExcel}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      {t('exportExcel')}
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  {reservations.map((reservation) => {
+                    const isReservationSelected = selectedReservationIds.has(reservation.id);
+                    return (
+                      <div
+                        key={reservation.id}
+                        className={`rounded-lg border p-4 ${
+                          isReservationSelected
+                            ? 'border-blue-300 bg-blue-50'
+                            : 'border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50'
+                        }`}
+                      >
+                        <div className="mb-2 flex flex-col sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex min-w-0 flex-1 items-start gap-3">
+                            <button
+                              type="button"
+                              onClick={() => toggleReservationSelection(reservation.id)}
+                              className="mt-1 shrink-0 text-gray-400 transition-colors hover:text-blue-600"
+                            >
+                              {isReservationSelected ? (
+                                <CheckSquare className="h-5 w-5 text-blue-600" />
+                              ) : (
+                                <Square className="h-5 w-5" />
+                              )}
+                            </button>
+                            <div className="flex-1">
+                              <div className="mb-1 font-semibold text-gray-900">
+                                {formatReservationStudentLabel(reservation, language)}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {formatDateI18n(reservation.date, language)} {t('periodLabel', { number: reservation.period })}
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => handleCancelReservation(reservation)}
+                            variant="ghost"
+                            size="sm"
+                            className="mt-2 text-red-600 hover:bg-red-50 sm:mt-0"
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            {t('cancel')}
+                          </Button>
+                        </div>
+                        <div className="mb-1 text-sm text-gray-700 sm:ml-8">
+                          <span className="font-medium">{t('time')}:</span> {reservation.startTime} - {reservation.endTime}
+                        </div>
+                        <div className="mb-1 text-sm text-gray-700 sm:ml-8">
+                          <span className="font-medium">{t('topic')}:</span> {t(reservation.topic)}
+                        </div>
+                        <div className="mb-1 text-sm text-gray-700 sm:ml-8">
+                          <span className="font-medium">{t('method')}:</span>{' '}
+                          {reservation.consultationType === 'face'
+                            ? t('faceToFace')
+                            : reservation.consultationType === 'phone'
+                              ? t('phoneCounseling')
+                              : `${t('other')} (${reservation.consultationTypeEtc || ''})`}
+                        </div>
+                        <div className="text-sm text-gray-700 sm:ml-8">
+                          <span className="font-medium">{t('content')}:</span> {reservation.content}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-8">
+              <NonHomeroomRequestTable
+                title={t('classNonHomeroomRequests')}
+                description={t('classNonHomeroomRequestsDesc')}
+                requests={classNonHomeroomRequests}
+                language={language}
+                t={t}
+              />
+            </div>
+
+            {availableSlots.length === 0 &&
+              reservations.length === 0 &&
+              classNonHomeroomRequests.length === 0 && (
+                <div className="py-12 text-center text-gray-500">
+                  <CalendarIcon className="mx-auto mb-3 w-12 h-12 opacity-50" />
+                  <p>{t('noSetTimes')}</p>
+                  <p className="text-sm">{t('noSetTimesHint')}</p>
+                </div>
+              )}
+          </>
         )}
       </div>
 

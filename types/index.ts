@@ -41,6 +41,38 @@ export interface Reservation {
   createdAt: number;
 }
 
+export interface NonHomeroomTeacherOption {
+  teacherId: string;
+  teacherName: string;
+}
+
+export interface NonHomeroomRequest {
+  id: string;
+  targetTeacherId: string;
+  targetTeacherName: string;
+  homeroomTeacherId: string | null;
+  schoolCode: string;
+  schoolName: string;
+  grade: number;
+  classNum: number;
+  studentName: string;
+  preferredDate: string;
+  preferredTime: string;
+  preferredDateTime: string;
+  content: string;
+  createdAt: number;
+}
+
+export interface HomeroomBookingRecord extends Reservation {
+  requestType: 'homeroom';
+}
+
+export interface NonHomeroomBookingRecord extends NonHomeroomRequest {
+  requestType: 'nonHomeroom';
+}
+
+export type BookingRecord = HomeroomBookingRecord | NonHomeroomBookingRecord;
+
 // 교사 정보 타입
 export interface Teacher {
   id: string;

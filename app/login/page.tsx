@@ -31,10 +31,15 @@ export default function LoginPage() {
             await signInWithEmail(email, password);
             router.push('/');
         } catch (err: unknown) {
-            const firebaseError = err as { code?: string; message?: string };
+            const firebaseError = err as { code?: string; message?: string; name?: string };
 
             if (firebaseError.message === 'ACCOUNT_LOCKED') {
                 setError(t('accountLocked'));
+            } else if (
+                firebaseError.name === 'FIREBASE_NOT_CONFIGURED' ||
+                firebaseError.message?.includes('Firebase')
+            ) {
+                setError(t('firebaseConfigMissing'));
             } else if (firebaseError.message === 'PARENT_LOGIN_REMOVED') {
                 setError(
                     language === 'ko'
@@ -75,10 +80,15 @@ export default function LoginPage() {
                 router.push('/');
             }
         } catch (err: unknown) {
-            const firebaseError = err as { code?: string; message?: string };
+            const firebaseError = err as { code?: string; message?: string; name?: string };
 
             if (firebaseError.message === 'ACCOUNT_LOCKED') {
                 setError(t('accountLocked'));
+            } else if (
+                firebaseError.name === 'FIREBASE_NOT_CONFIGURED' ||
+                firebaseError.message?.includes('Firebase')
+            ) {
+                setError(t('firebaseConfigMissing'));
             } else if (firebaseError.message === 'PARENT_LOGIN_REMOVED') {
                 setError(
                     language === 'ko'

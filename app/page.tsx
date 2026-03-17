@@ -12,6 +12,11 @@ export default function Home() {
   const { user, profile, loading, logout, refreshProfile } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const isNonHomeroomTeacher =
+    Boolean(profile) &&
+    (profile?.role === 'teacher' || profile?.role === 'admin') &&
+    profile.grade === 0 &&
+    profile.classNum === 0;
 
   const handleLogout = async () => {
     await logout();
@@ -158,13 +163,16 @@ export default function Home() {
               <p className="text-sm text-blue-200/70 max-w-lg mx-auto">
                 {profile.schoolName && (
                   <>
-                    <strong className="text-white">{profile.schoolName}</strong> {profile.grade}
-                    {t('gradeUnit')} {profile.classNum}
-                    {t('classUnit')}
+                    <strong className="text-white">{profile.schoolName}</strong>{' '}
+                    {isNonHomeroomTeacher
+                      ? t('nonHomeroom')
+                      : `${profile.grade}${t('gradeUnit')} ${profile.classNum}${t('classUnit')}`}
                     <br />
                   </>
                 )}
-                {profile.role === 'teacher' ? t('teacherWelcome') : t('parentWelcome')}
+                {profile.role === 'teacher'
+                  ? (isNonHomeroomTeacher ? t('nonHomeroomDashboardDesc') : t('teacherWelcome'))
+                  : t('parentWelcome')}
               </p>
             </>
           ) : (

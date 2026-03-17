@@ -42,8 +42,8 @@ export default function UserProfileModal({
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [statusMessage, setStatusMessage] = useState('');
-    const [grade, setGrade] = useState(profile.grade);
-    const [classNum, setClassNum] = useState(profile.classNum);
+    const [grade, setGrade] = useState(profile.grade || 1);
+    const [classNum, setClassNum] = useState(profile.classNum || 1);
     const [isNonHomeroom, setIsNonHomeroom] = useState(profile.grade === 0 && profile.classNum === 0);
     const { t, language } = useLanguage();
     const supportsGradeClassEdit =
@@ -61,8 +61,8 @@ export default function UserProfileModal({
         setSaving(false);
         setError('');
         setStatusMessage('');
-        setGrade(profile.grade);
-        setClassNum(profile.classNum);
+        setGrade(profile.grade || 1);
+        setClassNum(profile.classNum || 1);
         setIsNonHomeroom(profile.grade === 0 && profile.classNum === 0);
     }, [isOpen, isForcedGradeClassUpdate, profile.grade, profile.classNum]);
 
@@ -112,8 +112,8 @@ export default function UserProfileModal({
     };
 
     const handleEditClick = () => {
-        setGrade(profile.grade);
-        setClassNum(profile.classNum);
+        setGrade(profile.grade || 1);
+        setClassNum(profile.classNum || 1);
         setIsNonHomeroom(profile.grade === 0 && profile.classNum === 0);
         setError('');
         setStatusMessage('');
@@ -298,10 +298,7 @@ export default function UserProfileModal({
                                             checked={isNonHomeroom}
                                             onChange={(e) => {
                                                 setIsNonHomeroom(e.target.checked);
-                                                if (e.target.checked) {
-                                                    setGrade(0);
-                                                    setClassNum(0);
-                                                } else {
+                                                if (!e.target.checked) {
                                                     setGrade(profile.grade || 1);
                                                     setClassNum(profile.classNum || 1);
                                                 }
@@ -321,7 +318,7 @@ export default function UserProfileModal({
                                 <div>
                                     <label className="mb-1.5 block text-sm font-medium text-white/70">{t('grade')}</label>
                                     <select
-                                        value={isNonHomeroom ? 0 : grade}
+                                        value={grade}
                                         onChange={(event) => setGrade(Number(event.target.value))}
                                         disabled={isNonHomeroom}
                                         className="w-full cursor-pointer appearance-none rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white transition-all focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30"
@@ -345,7 +342,7 @@ export default function UserProfileModal({
                                             : t('classNum')}
                                     </label>
                                     <select
-                                        value={isNonHomeroom ? 0 : classNum}
+                                        value={classNum}
                                         onChange={(event) => setClassNum(Number(event.target.value))}
                                         disabled={isNonHomeroom}
                                         className="w-full cursor-pointer appearance-none rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white transition-all focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30"

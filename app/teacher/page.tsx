@@ -1448,7 +1448,8 @@ export default function TeacherPage() {
                             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
                               <Button
                                 type="button"
-                                variant="ghost"
+                                variant="outline"
+                                className="!border-gray-300 !bg-white !text-gray-700 hover:!border-gray-400 hover:!bg-gray-50"
                                 onClick={handleCloseReservationEditor}
                                 disabled={isSavingReservation}
                               >
@@ -1457,7 +1458,7 @@ export default function TeacherPage() {
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="border-emerald-600 bg-emerald-600 text-white hover:border-emerald-700 hover:bg-emerald-700"
+                                className="!border-emerald-600 !bg-emerald-600 !text-white hover:!border-emerald-700 hover:!bg-emerald-700 focus:!ring-emerald-500"
                                 onClick={() => handleSaveReservationEdit(reservation)}
                                 disabled={isSavingReservation}
                               >

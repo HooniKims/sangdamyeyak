@@ -205,8 +205,17 @@
   - [x] `app/teacher/page.tsx`, `firestore.rules`, `lib/auth-firebase.ts` 등 주요 파일 업데이트 완료
 - [x] `schoolholic` 깃허브 저장소 내용을 `sangdamyeyak` 폴더로 직접 복제 완료
 - [x] 로그인 실패 원인 분석 및 해결 (Netlify 환경변수 `NEXT_PUBLIC_FIREBASE_PROJECT_ID` 오타 수정 가이드 제공)
-- [x] 교용 예약 현황 일괄 취소 기능 추가
+- [x] 교사용 예약 현황 일괄 취소 기능 추가
   - [x] 예약 현황 섹션에 전체 선택 및 다중 선택 UI 추가
   - [x] `runTransaction`을 이용한 예약 삭제 및 슬롯 상태(`available`) 복구 로직 구현
   - [x] 일괄 취소 확인 문구 i18n(한/영) 반영 및 `npm run build` 검증 완료
 - [x] 최신 변경 사항 깃허브 업로드 (`main` 브랜치) - 2026-03-15
+- [x] 교사용 예약 현황 상담 완료/예약 변경 기능 추가 (2026-04-03)
+  - [x] 예약 현황 섹션에 전체 선택 기반 초록색 `예약 완료` 일괄 처리 버튼 추가
+  - [x] 개별 예약 카드에 `상담 완료` / `완료 해제`, `예약 변경`, `취소` 액션 추가
+  - [x] 예약 변경 시 해당 학생 카드 하단에 인라인 수정 폼을 열고 학생명, 학년/반, 예약 시간, 상담 방법, 주제, 내용을 수정하도록 구현
+  - [x] 예약 시간 변경 시 기존 슬롯 복구 + 새 슬롯 예약 + 예약 문서 갱신을 안전한 트랜잭션 흐름으로 처리해 기존 Firebase 데이터 유실 없이 반영
+  - [x] `reservations` 문서에 선택적 완료 상태 필드(`isCompleted`, `completedAt`, `updatedAt`)를 추가하고 `firestore.rules` 허용 범위 갱신
+  - [x] 학부모 예약 조회 화면(`/parent`, `/check-reservation`)에 수정된 예약 정보와 상담 완료 상태 배지 반영
+  - [x] `node --test lib/reservation-editor.test.ts`, `npx tsc --noEmit`, `npm run lint`, `npm run build` 검증 완료
+  - [x] 예약 변경 인라인 폼의 `수정취소`, `변경저장` 버튼 가시성 보정: 취소 버튼 테두리 추가, 저장 버튼 초록 배경/흰 글자 강조, `npx eslint app/teacher/page.tsx` 검증 완료

@@ -30,6 +30,8 @@ export interface Reservation {
   studentName: string;
   grade?: number;
   classNum?: number;
+  schoolCode?: string;
+  schoolName?: string;
   date: string;
   period: number;
   startTime: string;
@@ -39,6 +41,9 @@ export interface Reservation {
   consultationType: 'face' | 'phone' | 'etc';
   consultationTypeEtc?: string;
   createdAt: number;
+  isCompleted?: boolean;
+  completedAt?: number | null;
+  updatedAt?: number;
 }
 
 export interface NonHomeroomTeacherOption {

@@ -45,6 +45,20 @@ function isPastBookingRecord(record: BookingRecord) {
   return dateTime.getTime() < Date.now();
 }
 
+function formatHomeroomReservationMethod(
+  record: BookingRecord,
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  if (isNonHomeroomBookingRecord(record)) {
+    return '';
+  }
+
+  if (record.consultationType === 'face') return t('faceToFace');
+  if (record.consultationType === 'phone') return t('phoneCounseling');
+
+  return `${t('other')} (${record.consultationTypeEtc || ''})`;
+}
+
 export default function PublicCheckReservationPage() {
   const { t, language } = useLanguage();
   const [schoolName, setSchoolName] = useState('');
@@ -312,6 +326,11 @@ export default function PublicCheckReservationPage() {
                                 {t('pastReservation')}
                               </span>
                             )}
+                            {!isNonHomeroomBookingRecord(record) && record.isCompleted && (
+                              <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                                {t('reservationCompleted')}
+                              </span>
+                            )}
                           </div>
 
                           {isNonHomeroomBookingRecord(record) ? (
@@ -339,6 +358,13 @@ export default function PublicCheckReservationPage() {
                                 <div>
                                   <span className="font-medium text-gray-700">{t('topic')}:</span>{' '}
                                   <span className="text-gray-600">{t(record.topic)}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-2 text-sm">
+                                <MessageSquare className="mt-0.5 h-4 w-4 text-gray-500" />
+                                <div>
+                                  <span className="font-medium text-gray-700">{t('methodLabel')}</span>{' '}
+                                  <span className="text-gray-600">{formatHomeroomReservationMethod(record, t)}</span>
                                 </div>
                               </div>
                             </>

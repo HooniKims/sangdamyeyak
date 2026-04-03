@@ -9,15 +9,57 @@ import Calendar from '@/components/Calendar';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ConfirmModal from '@/components/ConfirmModal';
-import { Period, AvailableSlot, Reservation, DEFAULT_PERIODS, NonHomeroomRequest } from '@/types';
+import { Period, AvailableSlot, Reservation, DEFAULT_PERIODS, NonHomeroomRequest, COUNSELING_TOPICS, CounselingTopic } from '@/types';
 import { formatDate, formatDateI18n } from '@/lib/utils';
-import { Clock, Trash2, Settings, Calendar as CalendarIcon, Download, X, Home, CheckSquare, Square, Users } from 'lucide-react';
+import { Clock, Trash2, Settings, Calendar as CalendarIcon, Download, X, Home, CheckSquare, Square, Users, Check, Pencil } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/components/AuthContext';
 import { useLanguage } from '@/lib/i18n';
 import { formatReservationStudentLabel } from '@/lib/reservation-firebase';
+import {
+  buildSelectableReservationSlots,
+  buildReservationCompletionPatch,
+  buildReservationMutationPlan,
+  EditableReservationDraft,
+} from '@/lib/reservation-editor';
 
 const BULK_DELETE_BATCH_SIZE = 400;
+const SLOT_ALREADY_RESERVED_ERROR = 'slot-already-reserved';
+
+type ReservationEditFormState = EditableReservationDraft & {
+  selectedSlotId: string;
+  grade: number;
+  classNum: number;
+};
+
+function getReservationTopic(topic: string): CounselingTopic {
+  return COUNSELING_TOPICS.includes(topic as CounselingTopic)
+    ? (topic as CounselingTopic)
+    : COUNSELING_TOPICS[0];
+}
+
+function createReservationEditFormState(reservation: Reservation): ReservationEditFormState {
+  return {
+    selectedSlotId: reservation.slotId,
+    studentName: reservation.studentName,
+    grade: reservation.grade ?? 1,
+    classNum: reservation.classNum ?? 1,
+    topic: getReservationTopic(reservation.topic),
+    content: reservation.content,
+    consultationType: reservation.consultationType,
+    consultationTypeEtc: reservation.consultationTypeEtc ?? '',
+  };
+}
+
+function formatConsultationTypeLabel(
+  reservation: Pick<Reservation, 'consultationType' | 'consultationTypeEtc'>,
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  if (reservation.consultationType === 'face') return t('faceToFace');
+  if (reservation.consultationType === 'phone') return t('phoneCounseling');
+
+  return `${t('other')} (${reservation.consultationTypeEtc || ''})`;
+}
 
 function NonHomeroomRequestTable({
   title,
@@ -188,6 +230,9 @@ export default function TeacherPage() {
   const [selectedSlotIds, setSelectedSlotIds] = useState<Set<string>>(new Set());
   const [selectedReservationIds, setSelectedReservationIds] = useState<Set<string>>(new Set());
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [editingReservationId, setEditingReservationId] = useState<string | null>(null);
+  const [reservationEditForm, setReservationEditForm] = useState<ReservationEditFormState | null>(null);
+  const [savingReservationId, setSavingReservationId] = useState<string | null>(null);
   const [directNonHomeroomRequests, setDirectNonHomeroomRequests] = useState<NonHomeroomRequest[]>([]);
   const [classNonHomeroomRequests, setClassNonHomeroomRequests] = useState<NonHomeroomRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,6 +244,7 @@ export default function TeacherPage() {
     onConfirm: () => { },
     confirmText: undefined as string | undefined,
     cancelText: undefined as string | null | undefined,
+    isDangerous: true,
   });
   const isNonHomeroomTeacher =
     Boolean(profile) &&
@@ -285,7 +331,14 @@ export default function TeacherPage() {
       unsubscribeSlots();
       unsubscribeReservations();
     };
-  }, [teacherId, isNonHomeroomTeacher]);
+  }, [teacherId, isNonHomeroomTeacher, profile?.schoolCode]);
+
+  useEffect(() => {
+    if (editingReservationId && !reservations.some((reservation) => reservation.id === editingReservationId)) {
+      setEditingReservationId(null);
+      setReservationEditForm(null);
+    }
+  }, [editingReservationId, reservations]);
 
   useEffect(() => {
     if (!teacherId || !isNonHomeroomTeacher) {
@@ -314,7 +367,7 @@ export default function TeacherPage() {
     });
 
     return () => unsubscribe();
-  }, [teacherId, isNonHomeroomTeacher]);
+  }, [teacherId, isNonHomeroomTeacher, profile?.schoolCode]);
 
   useEffect(() => {
     if (!teacherId || isNonHomeroomTeacher) {
@@ -342,7 +395,7 @@ export default function TeacherPage() {
     });
 
     return () => unsubscribe();
-  }, [teacherId, isNonHomeroomTeacher]);
+  }, [teacherId, isNonHomeroomTeacher, profile?.schoolCode]);
 
   // 교시 시간 저장
   const savePeriods = async () => {
@@ -450,6 +503,7 @@ export default function TeacherPage() {
       message: t('deleteSlotMessage'),
       confirmText: t('delete'),
       cancelText: t('cancel'),
+      isDangerous: true,
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, 'availableSlots', slotId));
@@ -480,6 +534,7 @@ export default function TeacherPage() {
       message: t('cancelReservationMessage', { student: studentLabel }),
       confirmText: t('cancelReservation'),
       cancelText: t('cancel'),
+      isDangerous: true,
       onConfirm: async () => {
         try {
           const reservationRef = doc(db, 'reservations', reservation.id);
@@ -497,6 +552,129 @@ export default function TeacherPage() {
         }
       },
     });
+  };
+
+  const handleOpenReservationEditor = (reservation: Reservation) => {
+    setEditingReservationId(reservation.id);
+    setReservationEditForm(createReservationEditFormState(reservation));
+  };
+
+  const handleCloseReservationEditor = () => {
+    setEditingReservationId(null);
+    setReservationEditForm(null);
+  };
+
+  const handleReservationEditFieldChange = <K extends keyof ReservationEditFormState>(
+    key: K,
+    value: ReservationEditFormState[K],
+  ) => {
+    setReservationEditForm((prev) => {
+      if (!prev) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [key]: value,
+      };
+    });
+  };
+
+  const handleToggleReservationCompletion = async (reservation: Reservation) => {
+    try {
+      setSavingReservationId(reservation.id);
+      await updateDoc(
+        doc(db, 'reservations', reservation.id),
+        buildReservationCompletionPatch(!reservation.isCompleted, Date.now()),
+      );
+    } catch (error) {
+      console.error('Reservation completion error:', error);
+      alert(t('reservationCompletionUpdateFailed'));
+    } finally {
+      setSavingReservationId(null);
+    }
+  };
+
+  const handleSaveReservationEdit = async (reservation: Reservation) => {
+    if (!reservationEditForm || editingReservationId !== reservation.id) {
+      return;
+    }
+
+    if (!reservationEditForm.studentName.trim()) {
+      alert(t('enterStudentName'));
+      return;
+    }
+
+    if (reservationEditForm.consultationType === 'etc' && !reservationEditForm.consultationTypeEtc.trim()) {
+      alert(t('enterOtherMethod'));
+      return;
+    }
+
+    const slotOptions = buildSelectableReservationSlots(reservation, availableSlots);
+    const selectedSlot = slotOptions.find((slot) => slot.id === reservationEditForm.selectedSlotId);
+
+    if (!selectedSlot) {
+      alert(t('selectEditedReservationSlot'));
+      return;
+    }
+
+    const mutationPlan = buildReservationMutationPlan({
+      currentReservation: reservation,
+      selectedSlot,
+      draft: reservationEditForm,
+      now: Date.now(),
+    });
+
+    try {
+      setSavingReservationId(reservation.id);
+
+      if (mutationPlan.mode === 'update') {
+        await updateDoc(doc(db, 'reservations', reservation.id), mutationPlan.nextReservation);
+      } else {
+        const currentReservationRef = doc(db, 'reservations', reservation.id);
+        const nextReservationRef = doc(db, 'reservations', mutationPlan.nextReservationId);
+        const currentSlotRef = doc(db, 'availableSlots', reservation.slotId);
+        const nextSlotRef = doc(db, 'availableSlots', mutationPlan.nextReservationId);
+
+        await runTransaction(db, async (transaction) => {
+          const nextSlotDoc = await transaction.get(nextSlotRef);
+          const nextReservationDoc = await transaction.get(nextReservationRef);
+
+          if (!nextSlotDoc.exists() || nextSlotDoc.data().status !== 'available' || nextReservationDoc.exists()) {
+            throw new Error(SLOT_ALREADY_RESERVED_ERROR);
+          }
+
+          const currentSlotDoc = await transaction.get(currentSlotRef);
+
+          if (currentSlotDoc.exists()) {
+            transaction.update(currentSlotRef, { status: 'available' });
+          }
+
+          transaction.update(nextSlotRef, { status: 'reserved' });
+          transaction.delete(currentReservationRef);
+          transaction.set(nextReservationRef, mutationPlan.nextReservation);
+        });
+
+        setSelectedReservationIds((prev) => {
+          const next = new Set(prev);
+          next.delete(reservation.id);
+          next.add(mutationPlan.nextReservationId);
+          return next;
+        });
+      }
+
+      handleCloseReservationEditor();
+      alert(t('reservationUpdated'));
+    } catch (error) {
+      console.error('Reservation update error:', error);
+      alert(
+        error instanceof Error && error.message === SLOT_ALREADY_RESERVED_ERROR
+          ? t('alreadyReserved')
+          : t('reservationUpdateFailed'),
+      );
+    } finally {
+      setSavingReservationId(null);
+    }
   };
 
   const toggleSlotSelection = (slotId: string) => {
@@ -546,6 +724,7 @@ export default function TeacherPage() {
       message: t('confirmBulkDeleteSlots', { count: slotIdsToDelete.length }),
       confirmText: t('deleteSelected'),
       cancelText: t('cancel'),
+      isDangerous: true,
       onConfirm: async () => {
         try {
           for (let index = 0; index < slotIdsToDelete.length; index += BULK_DELETE_BATCH_SIZE) {
@@ -596,6 +775,44 @@ export default function TeacherPage() {
     }
   };
 
+  const handleBulkCompleteReservations = () => {
+    const reservationsToComplete = reservations.filter(
+      (reservation) => selectedReservationIds.has(reservation.id) && !reservation.isCompleted,
+    );
+
+    if (reservationsToComplete.length === 0) {
+      alert(t('selectReservationsToComplete'));
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: t('completeReservationTitle'),
+      message: t('confirmBulkCompleteReservations', { count: reservationsToComplete.length }),
+      confirmText: t('completeReservation'),
+      cancelText: t('cancel'),
+      isDangerous: false,
+      onConfirm: async () => {
+        try {
+          const completedAt = Date.now();
+
+          for (const reservation of reservationsToComplete) {
+            await updateDoc(
+              doc(db, 'reservations', reservation.id),
+              buildReservationCompletionPatch(true, completedAt),
+            );
+          }
+
+          setSelectedReservationIds(new Set());
+          alert(t('reservationsCompleted'));
+        } catch (error) {
+          console.error('Bulk reservation completion error:', error);
+          alert(t('reservationCompletionUpdateFailed'));
+        }
+      },
+    });
+  };
+
   // 예약 벌크 취소
   const handleBulkCancelReservations = () => {
     const reservationsToCancel = reservations.filter(r => selectedReservationIds.has(r.id));
@@ -611,6 +828,7 @@ export default function TeacherPage() {
       message: t('confirmBulkCancelReservations', { count: reservationsToCancel.length }),
       confirmText: t('cancelReservation'),
       cancelText: t('cancel'),
+      isDangerous: true,
       onConfirm: async () => {
         try {
           for (const reservation of reservationsToCancel) {
@@ -641,6 +859,7 @@ export default function TeacherPage() {
       message: t('confirmBulkDeleteSlots', { count: ids.length }),
       confirmText: t('delete'),
       cancelText: t('cancel'),
+      isDangerous: true,
       onConfirm: async () => {
         try {
           for (const id of ids) {
@@ -968,6 +1187,17 @@ export default function TeacherPage() {
                       </button>
                       <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
+                        className="sm:min-w-[132px] border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"
+                        disabled={selectedReservationIds.size === 0}
+                        onClick={handleBulkCompleteReservations}
+                      >
+                        <Check className="mr-2 h-4 w-4" />
+                        {t('completeReservation')}
+                      </Button>
+                      <Button
+                        type="button"
                         variant="danger"
                         size="sm"
                         className="sm:min-w-[132px]"
@@ -991,6 +1221,12 @@ export default function TeacherPage() {
                 <div className="space-y-4">
                   {reservations.map((reservation) => {
                     const isReservationSelected = selectedReservationIds.has(reservation.id);
+                    const isEditing = editingReservationId === reservation.id && reservationEditForm !== null;
+                    const editableSlots = isEditing
+                      ? buildSelectableReservationSlots(reservation, availableSlots)
+                      : [];
+                    const isSavingReservation = savingReservationId === reservation.id;
+
                     return (
                       <div
                         key={reservation.id}
@@ -1014,23 +1250,63 @@ export default function TeacherPage() {
                               )}
                             </button>
                             <div className="flex-1">
-                              <div className="mb-1 font-semibold text-gray-900">
-                                {formatReservationStudentLabel(reservation, language)}
+                              <div className="mb-1 flex flex-wrap items-center gap-2">
+                                <div className="font-semibold text-gray-900">
+                                  {formatReservationStudentLabel(reservation, language)}
+                                </div>
+                                {reservation.isCompleted && (
+                                  <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                                    {t('reservationCompleted')}
+                                  </span>
+                                )}
                               </div>
                               <div className="text-sm text-gray-600">
                                 {formatDateI18n(reservation.date, language)} {t('periodLabel', { number: reservation.period })}
                               </div>
                             </div>
                           </div>
-                          <Button
-                            onClick={() => handleCancelReservation(reservation)}
-                            variant="ghost"
-                            size="sm"
-                            className="mt-2 text-red-600 hover:bg-red-50 sm:mt-0"
-                          >
-                            <X className="w-4 h-4 mr-1" />
-                            {t('cancel')}
-                          </Button>
+                          <div className="mt-2 flex flex-wrap gap-2 sm:mt-0 sm:justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="border-emerald-200 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"
+                              disabled={isSavingReservation}
+                              onClick={() => handleToggleReservationCompletion(reservation)}
+                            >
+                              <Check className="mr-1 h-4 w-4" />
+                              {reservation.isCompleted
+                                ? t('undoReservationCompletion')
+                                : t('markReservationComplete')}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isSavingReservation}
+                              onClick={() => {
+                                if (isEditing) {
+                                  handleCloseReservationEditor();
+                                  return;
+                                }
+
+                                handleOpenReservationEditor(reservation);
+                              }}
+                            >
+                              <Pencil className="mr-1 h-4 w-4" />
+                              {isEditing ? t('closeEditReservation') : t('editReservation')}
+                            </Button>
+                            <Button
+                              onClick={() => handleCancelReservation(reservation)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:bg-red-50"
+                              disabled={isSavingReservation}
+                            >
+                              <X className="w-4 h-4 mr-1" />
+                              {t('cancel')}
+                            </Button>
+                          </div>
                         </div>
                         <div className="mb-1 text-sm text-gray-700 sm:ml-8">
                           <span className="font-medium">{t('time')}:</span> {reservation.startTime} - {reservation.endTime}
@@ -1040,15 +1316,157 @@ export default function TeacherPage() {
                         </div>
                         <div className="mb-1 text-sm text-gray-700 sm:ml-8">
                           <span className="font-medium">{t('method')}:</span>{' '}
-                          {reservation.consultationType === 'face'
-                            ? t('faceToFace')
-                            : reservation.consultationType === 'phone'
-                              ? t('phoneCounseling')
-                              : `${t('other')} (${reservation.consultationTypeEtc || ''})`}
+                          {formatConsultationTypeLabel(reservation, t)}
                         </div>
                         <div className="text-sm text-gray-700 sm:ml-8">
                           <span className="font-medium">{t('content')}:</span> {reservation.content}
                         </div>
+                        {isEditing && reservationEditForm && (
+                          <div className="mt-4 rounded-xl border border-gray-200 bg-white/80 p-4 sm:ml-8">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                  {t('studentNameField')}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={reservationEditForm.studentName}
+                                  onChange={(event) => handleReservationEditFieldChange('studentName', event.target.value)}
+                                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                  {t('editedReservationSlot')}
+                                </label>
+                                <select
+                                  value={reservationEditForm.selectedSlotId}
+                                  onChange={(event) => handleReservationEditFieldChange('selectedSlotId', event.target.value)}
+                                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                >
+                                  {editableSlots.map((slot) => (
+                                    <option key={slot.id} value={slot.id}>
+                                      {formatDateI18n(slot.date, language)} {t('periodLabel', { number: slot.period })} ({slot.startTime}-{slot.endTime})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                  {t('grade')}
+                                </label>
+                                <select
+                                  value={reservationEditForm.grade}
+                                  onChange={(event) => handleReservationEditFieldChange('grade', Number(event.target.value))}
+                                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                >
+                                  {[1, 2, 3, 4, 5, 6].map((gradeOption) => (
+                                    <option key={gradeOption} value={gradeOption}>
+                                      {gradeOption}
+                                      {t('gradeUnit')}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                  {t('classNum')}
+                                </label>
+                                <select
+                                  value={reservationEditForm.classNum}
+                                  onChange={(event) => handleReservationEditFieldChange('classNum', Number(event.target.value))}
+                                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                >
+                                  {Array.from({ length: 15 }, (_, index) => index + 1).map((classOption) => (
+                                    <option key={classOption} value={classOption}>
+                                      {classOption}
+                                      {t('classUnit')}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                  {t('topic')}
+                                </label>
+                                <select
+                                  value={reservationEditForm.topic}
+                                  onChange={(event) => handleReservationEditFieldChange('topic', event.target.value as CounselingTopic)}
+                                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                >
+                                  {COUNSELING_TOPICS.map((topicOption) => (
+                                    <option key={topicOption} value={topicOption}>
+                                      {t(topicOption)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                  {t('method')}
+                                </label>
+                                <select
+                                  value={reservationEditForm.consultationType}
+                                  onChange={(event) =>
+                                    handleReservationEditFieldChange(
+                                      'consultationType',
+                                      event.target.value as ReservationEditFormState['consultationType'],
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                >
+                                  <option value="face">{t('faceToFace')}</option>
+                                  <option value="phone">{t('phoneCounseling')}</option>
+                                  <option value="etc">{t('other')}</option>
+                                </select>
+                              </div>
+                              {reservationEditForm.consultationType === 'etc' && (
+                                <div className="sm:col-span-2">
+                                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                                    {t('otherMethodPlaceholder')}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={reservationEditForm.consultationTypeEtc}
+                                    onChange={(event) => handleReservationEditFieldChange('consultationTypeEtc', event.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                              )}
+                              <div className="sm:col-span-2">
+                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                  {t('content')}
+                                </label>
+                                <textarea
+                                  value={reservationEditForm.content}
+                                  onChange={(event) => handleReservationEditFieldChange('content', event.target.value)}
+                                  rows={4}
+                                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={handleCloseReservationEditor}
+                                disabled={isSavingReservation}
+                              >
+                                {t('cancelEditReservation')}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="border-emerald-600 bg-emerald-600 text-white hover:border-emerald-700 hover:bg-emerald-700"
+                                onClick={() => handleSaveReservationEdit(reservation)}
+                                disabled={isSavingReservation}
+                              >
+                                <Check className="mr-2 h-4 w-4" />
+                                {isSavingReservation ? t('savingReservationEdit') : t('saveReservationEdit')}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1086,7 +1504,7 @@ export default function TeacherPage() {
         onConfirm={confirmModal.onConfirm}
         title={confirmModal.title}
         message={confirmModal.message}
-        isDangerous={true}
+        isDangerous={confirmModal.isDangerous}
         confirmText={confirmModal.confirmText ?? t('delete')}
         cancelText={confirmModal.cancelText}
       />

@@ -12,7 +12,7 @@ const firebaseConfig = {
 };
 
 const missingFirebaseConfigKeys = Object.entries(firebaseConfig)
-  .filter(([_, value]) => typeof value !== 'string' || value.trim() === '')
+  .filter(([, value]) => typeof value !== 'string' || value.trim() === '')
   .map(([key]) => {
     const keyMap: Record<string, string> = {
       apiKey: 'NEXT_PUBLIC_FIREBASE_API_KEY',

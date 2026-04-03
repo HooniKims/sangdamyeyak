@@ -25,8 +25,11 @@ async function run() {
     );
     const snap = await getDocs(q);
     console.log("Query success! Found docs:", snap.size);
-  } catch (err: any) {
-    console.error("matchTeacher query failed with:", err.message);
+  } catch (err: unknown) {
+    console.error(
+      "matchTeacher query failed with:",
+      err instanceof Error ? err.message : String(err),
+    );
   }
 
   try {
@@ -50,8 +53,11 @@ async function run() {
     };
     const res = await addDoc(collection(db, 'nonHomeroomRequests'), payload);
     console.log("addDoc success! ID:", res.id);
-  } catch (err: any) {
-    console.error("addDoc failed with:", err.message);
+  } catch (err: unknown) {
+    console.error(
+      "addDoc failed with:",
+      err instanceof Error ? err.message : String(err),
+    );
   }
   process.exit(0);
 }

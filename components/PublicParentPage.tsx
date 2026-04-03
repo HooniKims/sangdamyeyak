@@ -33,14 +33,12 @@ import {
   BookingRecord,
   COUNSELING_TOPICS,
   CounselingTopic,
-  NonHomeroomTeacherOption,
 } from '@/types';
 import { SchoolInfo } from '@/types/auth';
 import { formatDate, formatDateI18n } from '@/lib/utils';
 import { db, isFirebaseConfigured } from '@/lib/firebase';
 import { useLanguage } from '@/lib/i18n';
 import {
-  getNonHomeroomTeachersBySchool,
   matchTeacher,
   matchTeacherWithName,
 } from '@/lib/auth-firebase';
@@ -78,12 +76,6 @@ function getNoMatchedTeacherMessage(language: 'ko' | 'en') {
     : 'No homeroom teacher was found for the selected school, grade, and class.';
 }
 
-function getNoNonHomeroomTeacherMessage(language: 'ko' | 'en') {
-  return language === 'ko'
-    ? '선택한 학교에 등록된 비담임 교사가 없습니다.'
-    : 'No non-homeroom teachers are registered for the selected school.';
-}
-
 function formatPreferredDateTime(date: string, time: string, language: 'ko' | 'en') {
   if (!date && !time) {
     return '';
@@ -106,6 +98,20 @@ function isPastBookingRecord(record: BookingRecord) {
   }
 
   return dateTime.getTime() < Date.now();
+}
+
+function formatHomeroomReservationMethod(
+  record: BookingRecord,
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  if (isNonHomeroomBookingRecord(record)) {
+    return '';
+  }
+
+  if (record.consultationType === 'face') return t('faceToFace');
+  if (record.consultationType === 'phone') return t('phoneCounseling');
+
+  return `${t('other')} (${record.consultationTypeEtc || ''})`;
 }
 
 export default function PublicParentPage() {
@@ -1352,6 +1358,11 @@ function CheckTab() {
                             {t('periodLabel', { number: record.period })}
                           </span>
                         )}
+                        {!isNonHomeroomBookingRecord(record) && record.isCompleted && (
+                          <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                            {t('reservationCompleted')}
+                          </span>
+                        )}
                       </div>
 
                       {isNonHomeroomBookingRecord(record) ? (
@@ -1376,6 +1387,11 @@ function CheckTab() {
                             <MessageSquare className="h-4 w-4 text-gray-500" />
                             <span className="font-medium text-gray-700">{t('topicLabel')}</span>
                             <span className="text-gray-600">{t(record.topic)}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-gray-700">
+                            <MessageSquare className="h-4 w-4 text-gray-500" />
+                            <span className="font-medium text-gray-700">{t('methodLabel')}</span>
+                            <span className="text-gray-600">{formatHomeroomReservationMethod(record, t)}</span>
                           </div>
                         </>
                       )}

@@ -153,6 +153,10 @@ service cloud.firestore {
       return value == null || value is string;
     }
 
+    function validNullableInt(value) {
+      return value == null || value is int;
+    }
+
     function validReservationShape(data, slotId) {
       return data.keys().hasOnly([
           'teacherId',
@@ -171,11 +175,14 @@ service cloud.firestore {
           'content',
           'consultationType',
           'consultationTypeEtc',
-          'createdAt'
+          'createdAt',
+          'isCompleted',
+          'completedAt',
+          'updatedAt'
         ]) &&
         data.slotId == slotId &&
         data.teacherId is string &&
-        data.studentNumber is string &&
+        (!data.keys().hasAny(['studentNumber']) || data.studentNumber is string) &&
         data.studentName is string &&
         data.grade is int &&
         data.classNum is int &&
@@ -190,8 +197,11 @@ service cloud.firestore {
         (data.consultationType == 'face' ||
           data.consultationType == 'phone' ||
           data.consultationType == 'etc') &&
-        data.consultationTypeEtc is string &&
-        data.createdAt is int;
+        (!data.keys().hasAny(['consultationTypeEtc']) || data.consultationTypeEtc is string) &&
+        data.createdAt is int &&
+        (!data.keys().hasAny(['isCompleted']) || data.isCompleted is bool) &&
+        (!data.keys().hasAny(['completedAt']) || validNullableInt(data.completedAt)) &&
+        (!data.keys().hasAny(['updatedAt']) || data.updatedAt is int);
     }
 
     function validReservationCreate() {
@@ -262,6 +272,22 @@ service cloud.firestore {
 
     function publicReservationLookupAllowed() {
       return request.query.limit != null && request.query.limit <= 20;
+    }
+
+    function validTeacherManagedReservationUpdate() {
+      return validReservationShape(request.resource.data, resource.data.slotId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'studentName',
+          'grade',
+          'classNum',
+          'topic',
+          'content',
+          'consultationType',
+          'consultationTypeEtc',
+          'isCompleted',
+          'completedAt',
+          'updatedAt'
+        ]);
     }
 
     function validSlotReservationTransition() {
@@ -341,7 +367,12 @@ service cloud.firestore {
 
       allow create: if validReservationCreate();
 
-      allow update: if false;
+      allow update: if isAdmin() ||
+        (
+          isTeacherOrAdmin() &&
+          resource.data.teacherId == request.auth.uid &&
+          validTeacherManagedReservationUpdate()
+        );
 
       allow delete: if isAdmin() ||
         (isTeacherOrAdmin() && resource.data.teacherId == request.auth.uid) ||

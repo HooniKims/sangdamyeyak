@@ -219,3 +219,6 @@
   - [x] 학부모 예약 조회 화면(`/parent`, `/check-reservation`)에 수정된 예약 정보와 상담 완료 상태 배지 반영
   - [x] `node --test lib/reservation-editor.test.ts`, `npx tsc --noEmit`, `npm run lint`, `npm run build` 검증 완료
   - [x] 예약 변경 인라인 폼의 `수정취소`, `변경저장` 버튼 가시성 보정: 취소 버튼 테두리 추가, 저장 버튼 초록 배경/흰 글자 강조, `npx eslint app/teacher/page.tsx` 검증 완료
+- [x] 교사용 예약 현황의 `예약 완료` 명칭을 `상담 완료`로 변경 (2026-04-03)
+  - [x] 일괄 완료 버튼, 확인 모달, 완료 안내 문구를 상담 기준 표현으로 통일
+  - [x] `npx eslint lib/i18n.ts` 검증 완료

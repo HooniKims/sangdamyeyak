@@ -28,6 +28,13 @@ import type { SchoolInfo } from '@/types/auth';
 
 type Tab = 'overview' | 'users' | 'reservations' | 'audit';
 type FormMode = 'create' | 'edit' | 'repair' | 'repairAuth';
+type UserSortKey =
+  | 'schoolClass'
+  | 'name'
+  | 'role'
+  | 'createdAt'
+  | 'lastSignInAt';
+type SortDirection = 'asc' | 'desc';
 
 type ManagedUser = {
   uid: string;
@@ -135,6 +142,30 @@ const STATUS_LABELS: Record<ManagedUser['status'], string> = {
   'profile-only': '인증 계정 누락',
 };
 
+const KOREAN_COLLATOR = new Intl.Collator('ko', {
+  numeric: true,
+  sensitivity: 'base',
+});
+
+function compareClassPlacement(a: ManagedUser, b: ManagedUser) {
+  const aNonHomeroom = a.grade === 0 && a.classNum === 0;
+  const bNonHomeroom = b.grade === 0 && b.classNum === 0;
+
+  if (aNonHomeroom !== bNonHomeroom) return aNonHomeroom ? 1 : -1;
+
+  const gradeComparison = (a.grade ?? 999) - (b.grade ?? 999);
+  if (gradeComparison !== 0) return gradeComparison;
+
+  return (a.classNum ?? 999) - (b.classNum ?? 999);
+}
+
+function compareOptionalDate(a?: string | null, b?: string | null) {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  return new Date(a).getTime() - new Date(b).getTime();
+}
+
 function formatDate(value?: string | null) {
   if (!value) return '-';
   const date = new Date(value);
@@ -152,6 +183,11 @@ function AdminContent() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [schoolFilter, setSchoolFilter] = useState('all');
+  const [gradeFilter, setGradeFilter] = useState('all');
+  const [userSortKey, setUserSortKey] =
+    useState<UserSortKey>('schoolClass');
+  const [userSortDirection, setUserSortDirection] =
+    useState<SortDirection>('asc');
   const [reservationSearch, setReservationSearch] = useState('');
   const [formMode, setFormMode] = useState<FormMode | null>(null);
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
@@ -211,24 +247,83 @@ function AdminContent() {
 
   const filteredUsers = useMemo(() => {
     const normalized = search.trim().toLowerCase();
-    return (data?.users || []).filter((item) => {
-      const matchesSearch =
-        !normalized ||
-        item.name.toLowerCase().includes(normalized) ||
-        item.email.toLowerCase().includes(normalized) ||
-        item.schoolName.toLowerCase().includes(normalized);
-      const matchesRole =
-        roleFilter === 'all' ||
-        (roleFilter === 'problem'
-          ? item.status !== 'linked'
-          : item.role === roleFilter);
-      return (
-        matchesSearch &&
-        matchesRole &&
-        (schoolFilter === 'all' || item.schoolName === schoolFilter)
-      );
-    });
-  }, [data, roleFilter, schoolFilter, search]);
+    const direction = userSortDirection === 'asc' ? 1 : -1;
+
+    return (data?.users || [])
+      .filter((item) => {
+        const matchesSearch =
+          !normalized ||
+          item.name.toLowerCase().includes(normalized) ||
+          item.email.toLowerCase().includes(normalized) ||
+          item.schoolName.toLowerCase().includes(normalized);
+        const matchesRole =
+          roleFilter === 'all' ||
+          (roleFilter === 'problem'
+            ? item.status !== 'linked'
+            : item.role === roleFilter);
+        const matchesGrade =
+          gradeFilter === 'all' || item.grade === Number(gradeFilter);
+        return (
+          matchesSearch &&
+          matchesRole &&
+          matchesGrade &&
+          (schoolFilter === 'all' || item.schoolName === schoolFilter)
+        );
+      })
+      .sort((a, b) => {
+        let comparison = 0;
+
+        if (userSortKey === 'schoolClass') {
+          const aMissingSchool = !a.schoolName;
+          const bMissingSchool = !b.schoolName;
+          if (aMissingSchool !== bMissingSchool) {
+            return aMissingSchool ? 1 : -1;
+          }
+          comparison = KOREAN_COLLATOR.compare(a.schoolName, b.schoolName);
+          if (comparison === 0) comparison = compareClassPlacement(a, b);
+        } else if (userSortKey === 'name') {
+          comparison = KOREAN_COLLATOR.compare(a.name, b.name);
+        } else if (userSortKey === 'role') {
+          comparison = KOREAN_COLLATOR.compare(a.role || '', b.role || '');
+        } else if (userSortKey === 'createdAt') {
+          if (Boolean(a.createdAt) !== Boolean(b.createdAt)) {
+            return a.createdAt ? -1 : 1;
+          }
+          comparison = compareOptionalDate(a.createdAt, b.createdAt);
+        } else {
+          if (Boolean(a.lastSignInAt) !== Boolean(b.lastSignInAt)) {
+            return a.lastSignInAt ? -1 : 1;
+          }
+          comparison = compareOptionalDate(a.lastSignInAt, b.lastSignInAt);
+        }
+
+        if (comparison !== 0) {
+          const nonHomeroomComparison = compareClassPlacement(a, b);
+          const sameSchool = a.schoolName === b.schoolName;
+          const eitherNonHomeroom =
+            (a.grade === 0 && a.classNum === 0) ||
+            (b.grade === 0 && b.classNum === 0);
+          if (
+            userSortKey === 'schoolClass' &&
+            sameSchool &&
+            eitherNonHomeroom
+          ) {
+            return nonHomeroomComparison;
+          }
+          return comparison * direction;
+        }
+
+        return KOREAN_COLLATOR.compare(a.name, b.name);
+      });
+  }, [
+    data,
+    gradeFilter,
+    roleFilter,
+    schoolFilter,
+    search,
+    userSortDirection,
+    userSortKey,
+  ]);
 
   const filteredReservations = useMemo(() => {
     const normalized = reservationSearch.trim().toLowerCase();
@@ -483,8 +578,8 @@ function AdminContent() {
         )}
         {tab === 'users' && (
           <section className="space-y-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="relative flex-1">
+            <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+              <div className="relative flex-1 lg:min-w-64">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
                   value={search}
@@ -498,14 +593,17 @@ function AdminContent() {
                 onChange={(event) => setRoleFilter(event.target.value)}
                 className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5"
               >
-                <option value="all">모든 상태</option>
+                <option value="all">모든 역할·상태</option>
                 <option value="teacher">교사</option>
                 <option value="admin">관리자</option>
                 <option value="problem">연결 문제</option>
               </select>
               <select
                 value={schoolFilter}
-                onChange={(event) => setSchoolFilter(event.target.value)}
+                onChange={(event) => {
+                  setSchoolFilter(event.target.value);
+                  setGradeFilter('all');
+                }}
                 className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5"
               >
                 <option value="all">모든 학교</option>
@@ -513,6 +611,46 @@ function AdminContent() {
                   <option key={school}>{school}</option>
                 ))}
               </select>
+              <select
+                value={gradeFilter}
+                onChange={(event) => setGradeFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5"
+              >
+                <option value="all">모든 학년</option>
+                <option value="1">1학년</option>
+                <option value="2">2학년</option>
+                <option value="3">3학년</option>
+                <option value="4">4학년</option>
+                <option value="5">5학년</option>
+                <option value="6">6학년</option>
+                <option value="0">비담임</option>
+              </select>
+              <select
+                value={userSortKey}
+                onChange={(event) =>
+                  setUserSortKey(event.target.value as UserSortKey)
+                }
+                className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5"
+                aria-label="정렬 기준"
+              >
+                <option value="schoolClass">학교·학반순</option>
+                <option value="name">이름순</option>
+                <option value="role">역할순</option>
+                <option value="createdAt">가입일순</option>
+                <option value="lastSignInAt">최근 로그인순</option>
+              </select>
+              <button
+                type="button"
+                onClick={() =>
+                  setUserSortDirection((current) =>
+                    current === 'asc' ? 'desc' : 'asc',
+                  )
+                }
+                className="whitespace-nowrap rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm hover:bg-white/10"
+                aria-label="정렬 방향 변경"
+              >
+                {userSortDirection === 'asc' ? '오름차순 ↑' : '내림차순 ↓'}
+              </button>
               <button
                 onClick={() => openForm('create')}
                 className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 font-semibold hover:bg-cyan-500"
@@ -520,6 +658,9 @@ function AdminContent() {
                 <Plus className="h-4 w-4" /> 계정 생성
               </button>
             </div>
+            <p className="text-sm text-slate-400">
+              조건에 맞는 계정 {filteredUsers.length}개
+            </p>
             <UserTable
               users={filteredUsers}
               onEdit={(item) =>

@@ -1,5 +1,5 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* ============================================
    CSS 변수 시스템
@@ -48,6 +48,42 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+}
+
+/* 버튼을 누르고 있는 동안 가벼운 물리적 피드백 제공 */
+:where(
+  button:not(:disabled),
+  a[href][class]:not([aria-disabled='true']),
+  [role='button']:not([aria-disabled='true'])
+) {
+  -webkit-tap-highlight-color: transparent;
+  transition-property: color, background-color, border-color, opacity,
+    box-shadow, filter, transform, scale, translate;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :where(
+    button:not(:disabled),
+    a[href][class]:not([aria-disabled='true']),
+    [role='button']:not([aria-disabled='true'])
+  ):active {
+    scale: 0.98;
+    translate: 0 1px;
+    filter: brightness(0.96);
+    transition-duration: 70ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(
+    button:not(:disabled),
+    a[href][class]:not([aria-disabled='true']),
+    [role='button']:not([aria-disabled='true'])
+  ):active {
+    filter: brightness(0.94);
+  }
 }
 
 /* ============================================

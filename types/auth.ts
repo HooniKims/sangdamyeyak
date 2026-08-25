@@ -16,6 +16,7 @@ export interface UserProfile {
     isLocked: boolean;
     failedLoginAttempts: number;
     gradeClassConfirmedSchoolYear?: number;
+    profileConfirmedAt?: Timestamp;
     createdAt: Timestamp;
     updatedAt: Timestamp;
 }

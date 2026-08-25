@@ -3,9 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import { X, AlertTriangle, CheckCircle, User } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
-import { updateUserGradeClass } from '@/lib/auth-firebase';
+import { updateUserSchoolGradeClass } from '@/lib/auth-firebase';
 import { useLanguage } from '@/lib/i18n';
-import { UserProfile } from '@/types/auth';
+import SchoolSearch from '@/components/SchoolSearch';
+import { SchoolInfo, UserProfile } from '@/types/auth';
 
 interface UserProfileModalProps {
     isOpen: boolean;
@@ -13,7 +14,7 @@ interface UserProfileModalProps {
     profile: UserProfile;
     onDeleteAccount: () => Promise<void>;
     onProfileUpdated: () => Promise<void>;
-    forceGradeClassUpdate?: boolean;
+    forceProfileConfirmation?: boolean;
 }
 
 type ModalStep = 'profile' | 'edit' | 'confirm' | 'complete';
@@ -35,36 +36,47 @@ export default function UserProfileModal({
     profile,
     onDeleteAccount,
     onProfileUpdated,
-    forceGradeClassUpdate = false,
+    forceProfileConfirmation = false,
 }: UserProfileModalProps) {
     const [step, setStep] = useState<ModalStep>('profile');
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [statusMessage, setStatusMessage] = useState('');
+    const [schoolName, setSchoolName] = useState(profile.schoolName || '');
+    const [schoolCode, setSchoolCode] = useState(profile.schoolCode || '');
     const [grade, setGrade] = useState(profile.grade || 1);
     const [classNum, setClassNum] = useState(profile.classNum || 1);
     const [isNonHomeroom, setIsNonHomeroom] = useState(profile.grade === 0 && profile.classNum === 0);
     const { t, language } = useLanguage();
-    const supportsGradeClassEdit =
-        profile.role === 'teacher' || profile.role === 'parent' || profile.role === 'admin';
+    const supportsGradeClassEdit = profile.role === 'teacher' || profile.role === 'admin';
     const isTeacherOrAdmin = profile.role === 'teacher' || profile.role === 'admin';
-    const isForcedGradeClassUpdate = forceGradeClassUpdate && supportsGradeClassEdit;
+    const isForcedProfileConfirmation =
+        forceProfileConfirmation && (profile.role === 'teacher' || profile.role === 'admin');
 
     useEffect(() => {
         if (!isOpen) {
             return;
         }
 
-        setStep(isForcedGradeClassUpdate ? 'edit' : 'profile');
+        setStep(isForcedProfileConfirmation ? 'edit' : 'profile');
         setLoading(false);
         setSaving(false);
         setError('');
         setStatusMessage('');
+        setSchoolName(profile.schoolName || '');
+        setSchoolCode(profile.schoolCode || '');
         setGrade(profile.grade || 1);
         setClassNum(profile.classNum || 1);
         setIsNonHomeroom(profile.grade === 0 && profile.classNum === 0);
-    }, [isOpen, isForcedGradeClassUpdate, profile.grade, profile.classNum]);
+    }, [
+        isOpen,
+        isForcedProfileConfirmation,
+        profile.schoolName,
+        profile.schoolCode,
+        profile.grade,
+        profile.classNum,
+    ]);
 
     if (!isOpen) {
         return null;
@@ -81,7 +93,7 @@ export default function UserProfileModal({
     };
 
     const handleDeleteClick = () => {
-        if (isForcedGradeClassUpdate) {
+        if (isForcedProfileConfirmation) {
             return;
         }
 
@@ -112,12 +124,19 @@ export default function UserProfileModal({
     };
 
     const handleEditClick = () => {
+        setSchoolName(profile.schoolName || '');
+        setSchoolCode(profile.schoolCode || '');
         setGrade(profile.grade || 1);
         setClassNum(profile.classNum || 1);
         setIsNonHomeroom(profile.grade === 0 && profile.classNum === 0);
         setError('');
         setStatusMessage('');
         setStep('edit');
+    };
+
+    const handleSchoolSelect = (school: SchoolInfo) => {
+        setSchoolName(school.schoolName);
+        setSchoolCode(school.schoolCode);
     };
 
     const handleSaveGradeClass = async () => {
@@ -128,25 +147,28 @@ export default function UserProfileModal({
         const saveClassNum = isNonHomeroom ? 0 : classNum;
 
         try {
-            const result = await updateUserGradeClass(profile.uid, saveGrade, saveClassNum);
+            if (!schoolName.trim() || !schoolCode) {
+                setError(t('selectSchoolFromSearch'));
+                return;
+            }
+
+            await updateUserSchoolGradeClass(
+                profile.uid,
+                schoolName,
+                schoolCode,
+                saveGrade,
+                saveClassNum
+            );
             await onProfileUpdated();
 
-            if (isForcedGradeClassUpdate) {
+            if (isForcedProfileConfirmation) {
                 setError('');
                 setStatusMessage('');
                 onClose();
                 return;
             }
 
-            if (profile.role === 'parent') {
-                setStatusMessage(
-                    result.matchedTeacherId
-                        ? t('gradeClassUpdatedMatched')
-                        : t('gradeClassUpdatedPendingMatch')
-                );
-            } else {
-                setStatusMessage(t('gradeClassUpdated'));
-            }
+            setStatusMessage(t('teacherProfileUpdated'));
 
             setStep('profile');
         } catch (saveError: unknown) {
@@ -154,6 +176,8 @@ export default function UserProfileModal({
 
             if (message === 'DUPLICATE_TEACHER_CLASS') {
                 setError(t('duplicateTeacher'));
+            } else if (message === 'SCHOOL_REQUIRED') {
+                setError(t('selectSchoolFromSearch'));
             } else {
                 setError(t('saveFailed'));
             }
@@ -163,7 +187,7 @@ export default function UserProfileModal({
     };
 
     const handleClose = () => {
-        if (isForcedGradeClassUpdate && step !== 'complete') {
+        if (isForcedProfileConfirmation && step !== 'complete') {
             return;
         }
 
@@ -248,7 +272,7 @@ export default function UserProfileModal({
                                     className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-500/10 py-2.5 text-sm font-medium text-cyan-300 transition-all duration-200 hover:bg-cyan-500/20 hover:text-cyan-200"
                                 >
                                     <User className="h-4 w-4" />
-                                    {t('editGradeClass')}
+                                    {t('editSchoolGradeClass')}
                                 </button>
                             )}
                             <button
@@ -266,11 +290,11 @@ export default function UserProfileModal({
                     <>
                         <div className="flex items-center justify-between border-b border-white/10 p-4">
                             <h3 className="text-lg font-semibold text-white">
-                                {isForcedGradeClassUpdate
-                                    ? t('annualGradeClassUpdateTitle')
-                                    : t('editGradeClass')}
+                                {isForcedProfileConfirmation
+                                    ? t('monthlyTeacherProfileTitle')
+                                    : t('editSchoolGradeClass')}
                             </h3>
-                            {!isForcedGradeClassUpdate && (
+                            {!isForcedProfileConfirmation && (
                                 <button
                                     onClick={handleClose}
                                     className="p-1 text-white/40 transition-colors hover:text-white/80"
@@ -281,14 +305,20 @@ export default function UserProfileModal({
                             )}
                         </div>
                         <div className="space-y-4 p-6">
-                            {isForcedGradeClassUpdate && (
+                            {isForcedProfileConfirmation && (
                                 <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
-                                    {t('annualGradeClassUpdateNotice')}
+                                    {t('monthlyTeacherProfileNotice')}
                                 </div>
                             )}
                             <div>
-                                <span className="text-xs uppercase tracking-wider text-white/40">{t('school')}</span>
-                                <p className="mt-1 font-medium text-white">{profile.schoolName}</p>
+                                <label className="mb-1.5 block text-sm font-medium text-white/70">
+                                    {t('school')}
+                                </label>
+                                <SchoolSearch
+                                    value={schoolName}
+                                    onSelect={handleSchoolSelect}
+                                    confirmed={Boolean(schoolCode)}
+                                />
                             </div>
                             {isTeacherOrAdmin && (
                                 <div className="flex items-center gap-3">
@@ -361,14 +391,12 @@ export default function UserProfileModal({
                                 </div>
                             </div>
                             <p className="text-sm leading-relaxed text-white/55">
-                                {profile.role === 'parent'
-                                    ? t('gradeClassUpdateHintParent')
-                                    : t('gradeClassUpdateHintTeacher')}
+                                {t('teacherProfileUpdateHint')}
                             </p>
                             {error && <p className="text-sm text-red-400">{error}</p>}
                         </div>
                         <div className="flex gap-3 border-t border-white/10 p-4">
-                            {!isForcedGradeClassUpdate && (
+                            {!isForcedProfileConfirmation && (
                                 <button
                                     onClick={() => {
                                         setStep('profile');
@@ -383,7 +411,7 @@ export default function UserProfileModal({
                             <button
                                 onClick={handleSaveGradeClass}
                                 disabled={saving}
-                                className={`flex items-center justify-center gap-2 rounded-xl bg-cyan-600 py-2.5 text-sm font-medium text-white transition-all hover:bg-cyan-500 disabled:bg-cyan-600/50 ${isForcedGradeClassUpdate ? 'w-full' : 'flex-1'}`}
+                                className={`flex items-center justify-center gap-2 rounded-xl bg-cyan-600 py-2.5 text-sm font-medium text-white transition-all hover:bg-cyan-500 disabled:bg-cyan-600/50 ${isForcedProfileConfirmation ? 'w-full' : 'flex-1'}`}
                             >
                                 {saving ? (
                                     <>
@@ -391,7 +419,7 @@ export default function UserProfileModal({
                                         {t('processing')}
                                     </>
                                 ) : (
-                                    t('save')
+                                    isForcedProfileConfirmation ? t('confirmAndSave') : t('save')
                                 )}
                             </button>
                         </div>

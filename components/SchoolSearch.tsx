@@ -11,6 +11,7 @@ interface SchoolSearchProps {
     onSelect: (school: SchoolInfo) => void;
     placeholder?: string;
     variant?: 'glass' | 'solid';
+    confirmed?: boolean;
 }
 
 export default function SchoolSearch({
@@ -18,19 +19,17 @@ export default function SchoolSearch({
     onSelect,
     placeholder,
     variant = 'glass',
+    confirmed,
 }: SchoolSearchProps) {
-    const [query, setQuery] = useState(value);
     const [results, setResults] = useState<SchoolInfo[]>([]);
     const [showDropdown, setShowDropdown] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [isConfirmed, setIsConfirmed] = useState(false);
+    const [locallyConfirmed, setLocallyConfirmed] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const debounceTimer = useRef<NodeJS.Timeout | null>(null);
     const { t } = useLanguage();
 
-    useEffect(() => {
-        setQuery(value);
-    }, [value]);
+    const isConfirmed = confirmed ?? locallyConfirmed;
 
     useEffect(() => {
         function handleClickOutside(e: MouseEvent) {
@@ -45,12 +44,8 @@ export default function SchoolSearch({
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
-        setQuery(val);
-
-        if (isConfirmed) {
-            setIsConfirmed(false);
-            onSelect({ schoolName: val, schoolCode: '', address: '', schoolType: '', eduOfficeCode: '' });
-        }
+        setLocallyConfirmed(false);
+        onSelect({ schoolName: val, schoolCode: '', address: '', schoolType: '', eduOfficeCode: '' });
 
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
@@ -69,9 +64,8 @@ export default function SchoolSearch({
     };
 
     const handleSelect = (school: SchoolInfo) => {
-        setQuery(school.schoolName);
         setShowDropdown(false);
-        setIsConfirmed(true);
+        setLocallyConfirmed(true);
         onSelect(school);
     };
 
@@ -96,7 +90,7 @@ export default function SchoolSearch({
         <div ref={wrapperRef} className="relative">
             <input
                 type="text"
-                value={query}
+                value={value}
                 onChange={handleInputChange}
                 onFocus={() => !isConfirmed && results.length > 0 && setShowDropdown(true)}
                 placeholder={placeholder || t('schoolSearchPlaceholder')}

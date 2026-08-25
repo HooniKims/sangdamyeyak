@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, firebaseInitErrorMessage, isFirebaseConfigured } from '@/lib/firebase';
 import { getUserProfile, signOutUser } from '@/lib/auth-firebase';
-import { requiresAnnualGradeClassUpdate } from '@/lib/school-year';
+import { requiresTeacherProfileConfirmation } from '@/lib/profile-confirmation';
 import { UserProfile } from '@/types/auth';
 
 interface AuthContextType {
@@ -13,7 +13,7 @@ interface AuthContextType {
     loading: boolean;
     logout: () => Promise<void>;
     refreshProfile: () => Promise<void>;
-    requiresGradeClassUpdate: boolean;
+    requiresProfileConfirmation: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -22,7 +22,7 @@ const AuthContext = createContext<AuthContextType>({
     loading: true,
     logout: async () => { },
     refreshProfile: async () => { },
-    requiresGradeClassUpdate: false,
+    requiresProfileConfirmation: false,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const requiresGradeClassUpdate = requiresAnnualGradeClassUpdate(profile);
+    const requiresProfileConfirmation = requiresTeacherProfileConfirmation(profile);
 
     return (
         <AuthContext.Provider
@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 loading,
                 logout,
                 refreshProfile,
-                requiresGradeClassUpdate,
+                requiresProfileConfirmation,
             }}
         >
             {children}

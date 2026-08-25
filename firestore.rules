@@ -55,6 +55,7 @@ service cloud.firestore {
           'isLocked',
           'failedLoginAttempts',
           'gradeClassConfirmedSchoolYear',
+          'profileConfirmedAt',
           'createdAt',
           'updatedAt'
         ]) &&
@@ -69,6 +70,7 @@ service cloud.firestore {
         request.resource.data.isLocked == false &&
         request.resource.data.failedLoginAttempts == 0 &&
         request.resource.data.gradeClassConfirmedSchoolYear is int &&
+        request.resource.data.profileConfirmedAt is timestamp &&
         request.resource.data.createdAt is timestamp &&
         request.resource.data.updatedAt is timestamp;
     }
@@ -79,15 +81,29 @@ service cloud.firestore {
           'classNum',
           'studentName',
           'matchedTeacherId',
+          'schoolName',
+          'schoolCode',
           'gradeClassConfirmedSchoolYear',
+          'profileConfirmedAt',
           'updatedAt'
         ]) &&
         request.resource.data.uid == resource.data.uid &&
         request.resource.data.email == resource.data.email &&
         request.resource.data.role == resource.data.role &&
         request.resource.data.name == resource.data.name &&
-        request.resource.data.schoolName == resource.data.schoolName &&
-        request.resource.data.schoolCode == resource.data.schoolCode &&
+        request.resource.data.schoolName is string &&
+        request.resource.data.schoolCode is string &&
+        (!request.resource.data.keys().hasAny(['profileConfirmedAt']) ||
+          request.resource.data.profileConfirmedAt is timestamp) &&
+        (
+          resource.data.role == 'teacher' ||
+          resource.data.role == 'admin' ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'schoolName',
+            'schoolCode',
+            'profileConfirmedAt'
+          ])
+        ) &&
         request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.isLocked == resource.data.isLocked &&
         request.resource.data.failedLoginAttempts == resource.data.failedLoginAttempts;
@@ -111,7 +127,13 @@ service cloud.firestore {
         request.resource.data.isLocked == resource.data.isLocked &&
         request.resource.data.failedLoginAttempts == resource.data.failedLoginAttempts &&
         request.resource.data.createdAt == resource.data.createdAt &&
-        request.resource.data.schoolCode == currentUserSchoolCode() &&
+        (
+          request.resource.data.schoolCode == currentUserSchoolCode() ||
+          (
+            resource.data.matchedTeacherId == request.auth.uid &&
+            request.resource.data.matchedTeacherId == null
+          )
+        ) &&
         (
           resource.data.matchedTeacherId == request.auth.uid ||
           request.resource.data.matchedTeacherId == request.auth.uid ||
@@ -267,7 +289,13 @@ service cloud.firestore {
         request.resource.data.preferredDateTime == resource.data.preferredDateTime &&
         request.resource.data.content == resource.data.content &&
         request.resource.data.createdAt == resource.data.createdAt &&
-        resource.data.schoolCode == currentUserSchoolCode();
+        (
+          resource.data.schoolCode == currentUserSchoolCode() ||
+          (
+            resource.data.homeroomTeacherId == request.auth.uid &&
+            request.resource.data.homeroomTeacherId == null
+          )
+        );
     }
 
     function publicReservationLookupAllowed() {
@@ -383,11 +411,15 @@ service cloud.firestore {
 
     match /nonHomeroomRequests/{requestId} {
       allow list: if isAdmin() ||
-        (isTeacherOrAdmin() && resource.data.schoolCode == currentUserSchoolCode()) ||
+        (isTeacherOrAdmin() &&
+          (resource.data.schoolCode == currentUserSchoolCode() ||
+            resource.data.homeroomTeacherId == request.auth.uid)) ||
         publicReservationLookupAllowed();
 
       allow get: if isAdmin() ||
-        (isTeacherOrAdmin() && resource.data.schoolCode == currentUserSchoolCode()) ||
+        (isTeacherOrAdmin() &&
+          (resource.data.schoolCode == currentUserSchoolCode() ||
+            resource.data.homeroomTeacherId == request.auth.uid)) ||
         publicReservationLookupAllowed();
 
       allow create: if validNonHomeroomRequestShape(request.resource.data);
@@ -397,6 +429,11 @@ service cloud.firestore {
 
       allow delete: if isAdmin() ||
         (isTeacherOrAdmin() && resource.data.schoolCode == currentUserSchoolCode());
+    }
+
+    match /adminAuditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /{document=**} {

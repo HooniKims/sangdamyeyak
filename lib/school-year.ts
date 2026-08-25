@@ -1,13 +1,6 @@
-import type { UserProfile } from '@/types/auth';
-
 const SCHOOL_YEAR_BOUNDARY_MONTH = 3;
 const SCHOOL_YEAR_BOUNDARY_DAY = 1;
 const SCHOOL_YEAR_TIME_ZONE = 'Asia/Seoul';
-const ANNUAL_GRADE_CLASS_UPDATE_START_YEAR = 2027;
-const ANNUAL_GRADE_CLASS_UPDATE_START_MONTH = 3;
-const ANNUAL_GRADE_CLASS_UPDATE_START_DAY = 1;
-
-type SchoolYearProfile = Pick<UserProfile, 'role' | 'gradeClassConfirmedSchoolYear'>;
 
 function getKoreanDateParts(date: Date) {
     const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -26,20 +19,6 @@ function getKoreanDateParts(date: Date) {
     };
 }
 
-function hasAnnualGradeClassUpdateStarted(date: Date) {
-    const { year, month, day } = getKoreanDateParts(date);
-
-    if (year !== ANNUAL_GRADE_CLASS_UPDATE_START_YEAR) {
-        return year > ANNUAL_GRADE_CLASS_UPDATE_START_YEAR;
-    }
-
-    if (month !== ANNUAL_GRADE_CLASS_UPDATE_START_MONTH) {
-        return month > ANNUAL_GRADE_CLASS_UPDATE_START_MONTH;
-    }
-
-    return day >= ANNUAL_GRADE_CLASS_UPDATE_START_DAY;
-}
-
 export function getCurrentSchoolYear(date = new Date()): number {
     const { year, month, day } = getKoreanDateParts(date);
 
@@ -51,30 +30,4 @@ export function getCurrentSchoolYear(date = new Date()): number {
     }
 
     return year - 1;
-}
-
-export function requiresAnnualGradeClassUpdate(
-    profile: SchoolYearProfile | null,
-    date = new Date()
-): boolean {
-    if (!profile) {
-        return false;
-    }
-
-    if (
-        profile.role !== 'teacher' &&
-        profile.role !== 'parent' &&
-        profile.role !== 'admin'
-    ) {
-        return false;
-    }
-
-    if (!hasAnnualGradeClassUpdateStarted(date)) {
-        return false;
-    }
-
-    return (
-        typeof profile.gradeClassConfirmedSchoolYear !== 'number' ||
-        profile.gradeClassConfirmedSchoolYear < getCurrentSchoolYear(date)
-    );
 }

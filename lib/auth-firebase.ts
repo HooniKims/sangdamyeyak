@@ -198,12 +198,7 @@ async function syncMatchedParentsForTeacher(
                 return;
             }
 
-            const rematchedTeacherId = await matchTeacher(
-                parent.schoolCode,
-                parent.grade,
-                parent.classNum
-            );
-            updatesByUid.set(parent.uid, rematchedTeacherId);
+            updatesByUid.set(parent.uid, null);
         })
     );
 
@@ -272,12 +267,7 @@ async function syncNonHomeroomRequestsForTeacher(
                 return;
             }
 
-            const rematchedTeacherId = await matchTeacher(
-                requestInfo.schoolCode,
-                requestInfo.grade,
-                requestInfo.classNum
-            );
-            updatesById.set(requestInfo.id, rematchedTeacherId);
+            updatesById.set(requestInfo.id, null);
         })
     );
 
@@ -364,6 +354,7 @@ export async function createUserProfile(
         isLocked: false,
         failedLoginAttempts: 0,
         gradeClassConfirmedSchoolYear: currentSchoolYear,
+        profileConfirmedAt: now,
         createdAt: now,
         updatedAt: now,
     };
@@ -593,8 +584,10 @@ export async function updateParentStudentName(uid: string, studentName: string):
     });
 }
 
-export async function updateUserGradeClass(
+export async function updateUserSchoolGradeClass(
     uid: string,
+    schoolName: string,
+    schoolCode: string,
     grade: number,
     classNum: number
 ): Promise<{ matchedTeacherId: string | null }> {
@@ -606,38 +599,38 @@ export async function updateUserGradeClass(
 
     const profile = profileSnap.data() as UserProfile;
     const currentSchoolYear = getCurrentSchoolYear();
+    const trimmedSchoolName = schoolName.trim();
+    const trimmedSchoolCode = schoolCode.trim();
+
+    if (!trimmedSchoolName || !trimmedSchoolCode) {
+        throw new Error('SCHOOL_REQUIRED');
+    }
+
+    if (profile.role === 'parent') {
+        throw new Error('TEACHER_PROFILE_UPDATE_ONLY');
+    }
+
     if ((profile.role === 'teacher' || profile.role === 'admin') && !(grade === 0 && classNum === 0)) {
-        const existingTeacherId = await matchTeacher(profile.schoolCode, grade, classNum);
+        const existingTeacherId = await matchTeacher(trimmedSchoolCode, grade, classNum);
         if (existingTeacherId && existingTeacherId !== uid) {
             throw new Error('DUPLICATE_TEACHER_CLASS');
         }
     }
 
-    if (profile.role === 'parent') {
-        const matchedTeacherId = await matchTeacher(profile.schoolCode, grade, classNum);
-
-        await updateDoc(doc(db, 'users', uid), {
-            grade,
-            classNum,
-            matchedTeacherId,
-            gradeClassConfirmedSchoolYear: currentSchoolYear,
-            updatedAt: serverTimestamp(),
-        });
-
-        return { matchedTeacherId };
-    }
-
     await updateDoc(doc(db, 'users', uid), {
+        schoolName: trimmedSchoolName,
+        schoolCode: trimmedSchoolCode,
         grade,
         classNum,
         gradeClassConfirmedSchoolYear: currentSchoolYear,
+        profileConfirmedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
     });
 
     try {
         await Promise.all([
-            syncMatchedParentsForTeacher(uid, profile.schoolCode, grade, classNum),
-            syncNonHomeroomRequestsForTeacher(uid, profile.schoolCode, grade, classNum),
+            syncMatchedParentsForTeacher(uid, trimmedSchoolCode, grade, classNum),
+            syncNonHomeroomRequestsForTeacher(uid, trimmedSchoolCode, grade, classNum),
         ]);
     } catch (error) {
         console.error('Failed to sync teacher-linked data after grade/class update:', error);

@@ -46,3 +46,6 @@ next-env.d.ts
 
 # cafe article (local only)
 /cafe-article
+
+# Local Netlify folder
+.netlify
